@@ -24,6 +24,8 @@ def test_bootstrap_creates_cortex_files(client, repo_dir: Path) -> None:
     assert (repo_dir / ".cortex" / "repo_map.json").exists()
     status_payload = json.loads((repo_dir / ".cortex" / "bootstrap_status.json").read_text(encoding="utf-8"))
     assert status_payload["bootstrap_complete"] is True
+    assert status_payload["graph_dirty"] is False
+    assert status_payload["last_graph_sync_at"]
 
 
 def test_bootstrap_is_idempotent(client, repo_dir: Path) -> None:

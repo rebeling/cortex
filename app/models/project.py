@@ -15,6 +15,9 @@ class ProjectModel(BaseModel):
     languages: list[str] = Field(default_factory=list)
     frameworks: list[str] = Field(default_factory=list)
     bootstrap_complete: bool
+    stored_memory_count: int = 0
+    graph_dirty: bool = False
+    last_graph_sync_at: datetime | None = None
 
 
 class SessionModel(BaseModel):
@@ -25,9 +28,14 @@ class SessionModel(BaseModel):
     source: str
 
 
+class CreateProjectRequest(BaseModel):
+    name: str = "Untitled Project"
+
+
 class BootstrapRequest(BaseModel):
     repo_path: str
     project_name: str | None = None
+    max_scan_files: int | None = None
 
     @field_validator("repo_path")
     @classmethod

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Cortex - Graph{% endblock %}
+{% block description %}Visualise the project knowledge graph stored in Cortex.{% endblock %}
+
+{% block content %}
+  <div class="page-shell">
+    <div class="page-panel narrow" style="max-width: none; padding-left: 12px; padding-right: 12px;">
+      <div class="graph-wrap">
+        <div class="graph-toolbar">
+          <button class="btn-primary" onclick="loadGraph()">Load Graph</button>
+        </div>
+        <div id="graph-status-note" class="graph-status-note"></div>
+        <div id="graph-canvas"></div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    async function loadGraph() {
+      const pid = selectedProject();
+      if (!pid) return;
+      renderGraphStatusNote();
+      const canvas = document.getElementById('graph-canvas');
+      canvas.innerHTML = '<div class="graph-empty"><span class="spinner"></span> Loading graph...</div>';
+
+      try {
+        const url = API + '/graph/' + pid + '/visualization?ts=' + Date.now();
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(await res.text());
+        await loadProjectStats(pid);
+        canvas.innerHTML = '<iframe class="graph-frame" title="Project knowledge graph"></iframe>';
+        const frame = canvas.querySelector('iframe');
+        frame.src = url;
+        frame.addEventListener('load', () => {
+          toast('Graph loaded');
+        }, { once: true });
+      } catch (error) {
+        canvas.innerHTML = '<div class="graph-empty">Error: ' + error.message + '</div>';
+        toast('Graph load failed', 'error');
+      }
+    }
+  </script>
+{% endblock %}

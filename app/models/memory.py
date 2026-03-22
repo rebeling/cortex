@@ -34,6 +34,8 @@ class RetrievalResult(BaseModel):
     item: MemoryItem
     score: float
     reason: str
+    dataset_id: str | None = None
+    dataset_name: str | None = None
 
 
 class IngestRequest(BaseModel):
@@ -90,4 +92,24 @@ class ContextRequest(BaseModel):
 
 class ContextResponse(BaseModel):
     memory_block: str
+    supporting_items: list[RetrievalResult]
+
+
+class ChatRequest(BaseModel):
+    project_id: str
+    query: str
+    file_paths: list[str] = Field(default_factory=list)
+    top_k: int = 6
+
+    @field_validator("project_id", "query")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("field must not be empty")
+        return value
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    answer_mode: Literal["llm", "fallback"]
     supporting_items: list[RetrievalResult]

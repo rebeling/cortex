@@ -9,6 +9,7 @@ from typing import Any
 from app.models.memory import MemoryItem, RetrievalResult
 from app.models.project import SessionModel
 from app.services.bootstrap_service import BootstrapService
+from app.services.chat_service import ChatService
 from app.services.cognee_service import CogneeService
 from app.services.context_service import ContextService
 from app.services.extraction_service import ExtractionService
@@ -32,6 +33,13 @@ class MemoryContextResult:
     supporting_items: list[RetrievalResult]
 
 
+@dataclass(slots=True)
+class MemoryChatResult:
+    answer: str
+    answer_mode: str
+    supporting_items: list[RetrievalResult]
+
+
 class MemoryService:
     def __init__(
         self,
@@ -41,6 +49,7 @@ class MemoryService:
         cognee_service: CogneeService,
         retrieval_service: RetrievalService,
         context_service: ContextService,
+        chat_service: ChatService,
     ) -> None:
         self._registry_service = registry_service
         self._bootstrap_service = bootstrap_service
@@ -48,6 +57,7 @@ class MemoryService:
         self._cognee_service = cognee_service
         self._retrieval_service = retrieval_service
         self._context_service = context_service
+        self._chat_service = chat_service
 
     def _require_project(self, project_id: str):
         project = self._registry_service.get_project(project_id)
@@ -102,9 +112,13 @@ class MemoryService:
             deduped_items.append(item)
             deduped_fingerprints.append(fingerprint)
 
-        await self._cognee_service.store_memory_items(project_id, deduped_items)
+        await self._cognee_service.store_memory_items(project_id, deduped_items, rebuild_graph=False)
         for fingerprint in deduped_fingerprints:
             self._registry_service.remember_fingerprint(project_id, fingerprint)
+
+        if deduped_items:
+            updated_project = self._bootstrap_service.increment_memory_count(project, len(deduped_items))
+            self._bootstrap_service.mark_graph_dirty(updated_project)
 
         return MemoryIngestResult(session_id=actual_session_id, stored_items=deduped_items)
 
@@ -116,7 +130,10 @@ class MemoryService:
         top_k: int,
         file_paths: list[str] | None = None,
     ) -> list[RetrievalResult]:
-        self._require_project(project_id)
+        project = self._require_project(project_id)
+        if project.graph_dirty:
+            await self._cognee_service.sync_graph(project_id)
+            self._bootstrap_service.mark_graph_synced(project)
         return await self._retrieval_service.search(
             project_id=project_id,
             query=query,
@@ -135,3 +152,15 @@ class MemoryService:
         results = await self.search(project_id=project_id, query=query, top_k=top_k, file_paths=file_paths)
         memory_block = self._context_service.compose(results)
         return MemoryContextResult(memory_block=memory_block, supporting_items=results)
+
+    async def chat(
+        self,
+        *,
+        project_id: str,
+        query: str,
+        top_k: int,
+        file_paths: list[str] | None = None,
+    ) -> MemoryChatResult:
+        results = await self.search(project_id=project_id, query=query, top_k=top_k, file_paths=file_paths)
+        answer = await self._chat_service.answer(query=query, results=results)
+        return MemoryChatResult(answer=answer.answer, answer_mode=answer.mode, supporting_items=results)

@@ -43,17 +43,33 @@
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      position: relative;
     }
     header h1 {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 18px;
       font-weight: 700;
-      background: linear-gradient(135deg, var(--accent), var(--green));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
       flex-shrink: 0;
     }
+    header h1 .logo-icon {
+      font-size: 21px;
+      line-height: 1;
+      margin: 0 0 4px 0;
+      background: linear-gradient(135deg, var(--accent), var(--green));
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header h1 .logo-text {
+      background: linear-gradient(135deg, var(--accent), var(--green));
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
 
-    /* ── Nav tabs in header, centered ──────────── */
+    /* ── Nav tabs centered in header ──────────── */
     .nav-tabs {
       display: flex;
       gap: 2px;
@@ -97,7 +113,16 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-glow);
     }
-    select { cursor: pointer; min-width: 200px; }
+    select { cursor: pointer; }
+    select.needs-attention {
+      border-color: #ffb74d;
+      box-shadow: 0 0 0 3px rgba(255, 183, 77, .3);
+      animation: pulse-attention 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse-attention {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(255, 183, 77, .2); }
+      50%      { box-shadow: 0 0 0 6px rgba(255, 183, 77, .45); }
+    }
 
     button {
       font-family: var(--font);
@@ -130,48 +155,50 @@
 
     /* ── Layout ──────────────────────────────────── */
     .main {
-      display: flex;
       flex: 1;
       overflow: hidden;
-    }
-    .panel {
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-    }
-    .panel-left {
-      flex: 1;
-      min-width: 380px;
-    }
-    .panel-left.has-graph { border-right: 1px solid var(--border); }
-    .panel-right {
-      flex: 1;
-      min-width: 380px;
-      position: relative;
-    }
-    .panel-right.hidden { display: none; }
-    .panel-header {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--text-dim);
-      padding: 14px 20px 10px;
-      flex-shrink: 0;
     }
 
     .tab-content { display: none; flex: 1; overflow: hidden; flex-direction: column; }
     .tab-content.active { display: flex; }
 
-    /* ── Bootstrap section ────────────────────────── */
-    .section-box {
-      padding: 24px 28px;
+    /* ── Centered content wrapper ─────────────── */
+    .centered-content {
+      display: flex;
+      justify-content: center;
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 24px;
+    }
+    .content-card {
+      width: 100%;
+      max-width: 640px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      max-width: 640px;
+      gap: 16px;
     }
-    .section-box label {
+
+    /* ── Info box ──────────────────────────────── */
+    .info-box {
+      padding: 14px 18px;
+      background: rgba(124, 92, 252, .06);
+      border: 1px solid rgba(124, 92, 252, .15);
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-dim);
+    }
+    .info-box strong { color: var(--text); }
+
+    /* ── Form elements ───────────────────────── */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-group label {
       font-size: 12px;
       font-weight: 500;
       color: var(--text-dim);
@@ -183,8 +210,8 @@
     }
     .input-row input { flex: 1; }
 
-    /* ── Dir picker ───────────────────────────────── */
-    .dir-picker-btn {
+    /* ── Dir/file picker ──────────────────────── */
+    .picker-btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -197,21 +224,34 @@
       font-size: 13px;
       font-weight: 500;
       transition: border-color .2s, color .2s;
+      white-space: nowrap;
     }
-    .dir-picker-btn:hover { border-color: var(--accent); color: var(--text); }
-    .dir-picker-btn.selected { border-color: var(--green); color: var(--green); border-style: solid; }
-    .dir-picker-hidden { display: none; }
-    .dir-path-display {
+    .picker-btn:hover { border-color: var(--accent); color: var(--text); }
+    .picker-btn.selected { border-color: var(--green); color: var(--green); border-style: solid; }
+    .picker-hidden { display: none; }
+    .picker-info {
       font-size: 12px;
       color: var(--text-dim);
-      padding: 4px 0;
       word-break: break-all;
     }
 
-    /* ── Push section ─────────────────────────────── */
-    .push-area textarea { width: 100%; min-height: 80px; resize: vertical; }
+    /* ── Push section ─────────────────────────── */
+    .push-area textarea { width: 100%; min-height: 100px; resize: vertical; }
 
-    /* ── Chat section ─────────────────────────────── */
+    /* ── Chat section (centered) ──────────────── */
+    .chat-wrap {
+      display: flex;
+      justify-content: center;
+      flex: 1;
+      overflow: hidden;
+    }
+    .chat-column {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 720px;
+      overflow: hidden;
+    }
     .chat-messages {
       flex: 1;
       overflow-y: auto;
@@ -264,9 +304,16 @@
     }
     .chat-input-bar input { flex: 1; }
 
-    /* ── Graph panel ──────────────────────────────── */
+    /* ── Graph tab ────────────────────────────── */
+    .graph-wrap {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
     .graph-toolbar {
       display: flex;
+      justify-content: center;
       gap: 8px;
       padding: 12px 20px;
       flex-shrink: 0;
@@ -286,7 +333,7 @@
       font-size: 14px;
     }
 
-    /* ── Toast ────────────────────────────────────── */
+    /* ── Toast ─────────────────────────────────── */
     .toast {
       position: fixed;
       bottom: 24px;
@@ -307,7 +354,7 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── Spinner ──────────────────────────────────── */
+    /* ── Spinner ───────────────────────────────── */
     .spinner {
       display: inline-block;
       width: 16px; height: 16px;
@@ -320,114 +367,355 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Scrollbar ────────────────────────────────── */
+    /* ── Stats bar ─────────────────────────────── */
+    .stats-bar {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 6px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      font-size: 12px;
+      color: var(--text-dim);
+      animation: statsIn .25s ease-out;
+    }
+    .stats-bar.visible { display: flex; }
+    @keyframes statsIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .stat-item .stat-label { color: var(--text-dim); }
+    .stat-item .stat-value { color: var(--text); font-weight: 600; }
+    .stat-item .stat-icon { font-size: 13px; }
+    .stat-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .stat-dot.ok { background: var(--green); }
+    .stat-dot.pending { background: #ffb74d; }
+
+    /* ── Scrollbar ─────────────────────────────── */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Accordion (details/summary) ───────────── */
+    .cortex-accordion {
+      flex-shrink: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+      width: 100%;
+    }
+    .cortex-accordion summary {
+      padding: 14px 20px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none; /* Hide default arrow */
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .cortex-accordion summary::-webkit-details-marker {
+      display: none;
+    }
+    .cortex-accordion summary::after {
+      content: '▼';
+      font-size: 10px;
+      color: var(--text-dim);
+      transition: transform 0.2s ease;
+    }
+    .cortex-accordion[open] summary {
+      border-bottom: 1px solid var(--border);
+    }
+    .cortex-accordion[open] summary::after {
+      transform: rotate(180deg);
+    }
+    .cortex-accordion-content {
+      padding: 20px;
+    }
   </style>
 </head>
 <body>
 
-<!-- ── Header with centered nav ─────────────────── -->
-<header style="position:relative;">
-  <h1>⬡ Cortex</h1>
+<!-- ── Header ───────────────────────────────────── -->
+<header>
+  <h1><span class="logo-icon">⬡</span><span class="logo-text">Cortex</span></h1>
   <div class="nav-tabs">
-    <button class="nav-tab active" data-tab="chat">Chat</button>
-    <button class="nav-tab" data-tab="push">Push</button>
-    <button class="nav-tab" data-tab="bootstrap">Bootstrap</button>
+    <button class="nav-tab active" data-tab="cognee">Cognee</button>
+    <button class="nav-tab" data-tab="chat">Chat</button>
+    <button class="nav-tab" data-tab="graph">Graph</button>
   </div>
   <div class="project-bar">
-    <select id="project-select">
+    <select id="project-select" class="needs-attention">
       <option value="">— select project —</option>
     </select>
-    <button class="btn-secondary" onclick="loadProjects()" title="Refresh projects">↻</button>
   </div>
 </header>
 
-<!-- ── Main panels ──────────────────────────────── -->
+<!-- ── Main ─────────────────────────────────────── -->
 <div class="main">
-  <!-- Left panel -->
-  <div class="panel panel-left has-graph" id="panel-left">
 
-    <!-- Chat tab -->
-    <div class="tab-content active" id="tab-chat">
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-input-bar">
-        <input id="chat-input" type="text" placeholder="Ask about your project memory…" autocomplete="off" />
-        <button class="btn-primary" id="chat-send" onclick="sendChat()">Send</button>
-      </div>
-    </div>
-
-    <!-- Push tab -->
-    <div class="tab-content" id="tab-push">
-      <div class="section-box push-area">
-        <label>Content to push into memory</label>
-        <textarea id="push-content" placeholder="Paste or type content here…"></textarea>
-        <label>Source type</label>
-        <input id="push-source" type="text" value="agent_summary" />
-        <label>File paths (comma-separated, optional)</label>
-        <input id="push-files" type="text" placeholder="app/main.py, app/services/foo.py" />
-        <button class="btn-green" onclick="pushMemory()">Push to Cortex</button>
-      </div>
-    </div>
-
-    <!-- Bootstrap tab -->
-    <div class="tab-content" id="tab-bootstrap">
-      <div class="section-box">
-        <label>Select a repository folder</label>
-        <div class="input-row">
-          <label class="dir-picker-btn" id="dir-picker-label">
-            📂 Choose directory…
-            <input type="file" webkitdirectory class="dir-picker-hidden" id="dir-picker" />
-          </label>
-          <span style="color:var(--text-dim);font-size:12px;">or</span>
-          <input id="bootstrap-path" type="text" placeholder="/absolute/path/to/repo" style="flex:1;" />
+  <!-- Chat tab -->
+  <div class="tab-content" id="tab-chat">
+    <div class="chat-wrap">
+      <div class="chat-column">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <input id="chat-input" type="text" placeholder="Ask about your project memory…" autocomplete="off" />
+          <button class="btn-primary" id="chat-send" onclick="sendChat()">Send</button>
         </div>
-        <div class="dir-path-display" id="dir-path-display"></div>
-        <button class="btn-primary" onclick="bootstrapProject()" style="align-self:flex-start;">Bootstrap Project</button>
-        <div id="bootstrap-result" style="font-size:13px; color:var(--text-dim); white-space:pre-wrap;"></div>
       </div>
     </div>
   </div>
 
-  <!-- Right panel: Knowledge Graph (shown only on Chat tab) -->
-  <div class="panel panel-right" id="panel-right">
-    <div class="panel-header">Knowledge Graph</div>
-    <div class="graph-toolbar">
-      <button class="btn-primary" onclick="loadGraph()">Load Graph</button>
+  <!-- Cognee tab -->
+  <div class="tab-content active" id="tab-cognee">
+    <div style="flex: 1; max-width: 800px; margin: 0 auto; width: 100%; padding: 32px 24px; overflow-y: auto; display: flex; flex-direction: column;">
+
+      <!-- Cognee Shortcuts -->
+      <div style="display: flex; gap: 12px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn-primary" style="background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);" onclick="openAndScroll('acc-push')">Push</button>
+        <button class="btn-primary" style="background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);" onclick="openAndScroll('acc-bootstrap')">Bootstrap</button>
+        <button class="btn-primary" style="background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);" onclick="openAndScroll('acc-create')">New Project</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="cortex-accordion" id="acc-stats" style="margin-bottom: 24px;">
+        <div style="padding: 14px 20px; font-weight: 600; background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border);">Project Stats</div>
+        <div class="cortex-accordion-content">
+          <div class="stats-bar visible" id="stats-bar" style="border-bottom: none; background: transparent; padding: 0; flex-wrap: wrap; animation: none;">
+            <div class="stat-item"><span class="stat-icon">📂</span><span class="stat-value" id="stat-name">—</span></div>
+            <div class="stat-item"><span class="stat-label">ID</span><span class="stat-value" id="stat-id">—</span></div>
+            <div class="stat-item"><span class="stat-label">Languages</span><span class="stat-value" id="stat-langs">—</span></div>
+            <div class="stat-item"><span class="stat-label">Frameworks</span><span class="stat-value" id="stat-fw">—</span></div>
+            <div class="stat-item"><span class="stat-label">Memories</span><span class="stat-value" id="stat-mem">—</span></div>
+            <div class="stat-item"><span class="stat-label">Last Bootstrap</span><span class="stat-value" id="stat-last">—</span></div>
+            <div class="stat-item"><span class="stat-dot" id="stat-dot"></span><span class="stat-value" id="stat-status">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Push Card -->
+      <details class="cortex-accordion" id="acc-push">
+        <summary>Push Memory</summary>
+        <div class="cortex-accordion-content push-area">
+          <div class="info-box">
+            <strong>Push memory into Cortex.</strong>
+            Send structured content (summaries, facts, descriptions) to be stored as memory.
+          </div>
+          <div class="form-group">
+            <label>Content to push into memory</label>
+            <textarea id="push-content" placeholder="Paste or type content here…" style="min-height: 120px;"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Source type</label>
+            <input id="push-source" type="text" value="agent_summary" />
+          </div>
+          <div class="form-group">
+            <label>Attach files</label>
+            <div class="input-row">
+              <label class="picker-btn" id="push-file-picker-label">
+                📄 Files…
+                <input type="file" multiple class="picker-hidden" id="push-file-picker" />
+              </label>
+              <label class="picker-btn" id="push-folder-picker-label">
+                📂 Folder…
+                <input type="file" webkitdirectory class="picker-hidden" id="push-folder-picker" />
+              </label>
+            </div>
+            <div class="picker-info" id="push-picker-info"></div>
+          </div>
+          <div class="form-group">
+            <label>Manual File paths</label>
+            <input id="push-files" type="text" placeholder="app/main.py, app/services/foo.py" />
+          </div>
+          <button class="btn-green" onclick="pushMemory()" style="align-self:flex-start;">Push to Cortex</button>
+        </div>
+      </details>
+
+      <!-- Bootstrap Card -->
+      <details class="cortex-accordion" id="acc-bootstrap">
+        <summary>Bootstrap / Re-scan Project</summary>
+        <div class="cortex-accordion-content">
+          <div class="info-box">
+            <strong>Re-scan selected project.</strong>
+            Updates languages, frameworks, and foundational memory without duplicating existing items.
+          </div>
+          <div class="form-group">
+            <label>Repository folder to re-scan</label>
+            <div class="input-row">
+              <label class="picker-btn" id="dir-picker-label">
+                📂 Directory…
+                <input type="file" webkitdirectory class="picker-hidden" id="dir-picker" />
+              </label>
+            </div>
+            <div class="picker-info" id="dir-path-display"></div>
+            <input id="bootstrap-path" type="text" placeholder="/absolute/path/to/repo" style="margin-top: 8px;" />
+          </div>
+          <div class="form-group">
+            <label>Max files to scan <span style="color:var(--text-dim);">(lower for quick test)</span></label>
+            <input id="bootstrap-max-files" type="number" min="1" max="5000" value="10" style="max-width:140px;" />
+          </div>
+          <button class="btn-primary" onclick="bootstrapProject()" style="align-self:flex-start;">Re-scan Project</button>
+          <div id="bootstrap-result" style="font-size:13px; color:var(--text-dim); white-space:pre-wrap; margin-top: 12px;"></div>
+        </div>
+      </details>
+
+      <!-- Create Project -->
+      <details class="cortex-accordion" id="acc-create">
+        <summary>Create New Project</summary>
+        <div class="cortex-accordion-content push-area">
+          <div class="info-box">
+            <strong>Create and Bootstrap a new project.</strong>
+            Select a repository folder to begin extracting memory and dependencies.
+          </div>
+          <div class="form-group">
+            <label>Project Name (optional)</label>
+            <input id="create-name" type="text" placeholder="e.g. cortex-backend" />
+          </div>
+          <div class="form-group">
+            <label>Select repository folder</label>
+            <div class="input-row">
+              <label class="picker-btn" id="create-dir-picker-label">
+                📂 Directory…
+                <input type="file" webkitdirectory class="picker-hidden" id="create-dir-picker" />
+              </label>
+            </div>
+            <div class="picker-info" id="create-dir-path-display"></div>
+            <input id="create-path" type="text" placeholder="/absolute/path/to/repo" style="margin-top: 8px;" />
+          </div>
+          <div class="form-group">
+            <label>Max files to scan initiall <span style="color:var(--text-dim);">(lower for quick test)</span></label>
+            <input id="create-max-files" type="number" min="1" max="5000" value="10" style="max-width:140px;" />
+          </div>
+          <button class="btn-primary" onclick="createProject()" style="align-self:flex-start;">Create Project</button>
+          <div id="create-result" style="font-size:13px; color:var(--text-dim); white-space:pre-wrap; margin-top: 12px;"></div>
+        </div>
+      </details>
+
+
     </div>
-    <div id="graph-canvas"></div>
   </div>
+
+  <!-- Graph tab -->
+  <div class="tab-content" id="tab-graph">
+    <div class="graph-wrap">
+      <div class="graph-toolbar">
+        <button class="btn-primary" onclick="loadGraph()">Load Graph</button>
+      </div>
+      <div id="graph-canvas"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 const API = '';  // same origin
 
 // ── Tab switching ─────────────────────────────────
-const graphTabs = new Set(['chat']);  // tabs that show the graph panel
+// ── Project selector attention ────────────────────
+const projectSelect = document.getElementById('project-select');
+projectSelect.addEventListener('change', () => {
+  projectSelect.classList.toggle('needs-attention', !projectSelect.value);
+  if (projectSelect.value) {
+    loadProjectStats(projectSelect.value);
+  } else {
+    // clear stats if deselecting
+    document.getElementById('stat-name').textContent = '—';
+    document.getElementById('stat-id').textContent = '—';
+    document.getElementById('stat-langs').textContent = '—';
+    document.getElementById('stat-fw').textContent = '—';
+    document.getElementById('stat-mem').textContent = '—';
+    document.getElementById('stat-last').textContent = '—';
+    document.getElementById('stat-status').textContent = '—';
+    document.getElementById('stat-dot').className = 'stat-dot';
+  }
+});
+
+async function loadProjectStats(pid) {
+  try {
+    const res = await fetch(API + '/projects/' + pid);
+    if (!res.ok) return;
+    const data = await res.json();
+    const p = data.project;
+    const bs = data.bootstrap_status || {};
+    document.getElementById('stat-name').textContent = p.name || '—';
+    document.getElementById('stat-id').textContent = p.id || '—';
+    document.getElementById('stat-langs').textContent = Array.isArray(p.languages) && p.languages.length ? p.languages.join(', ') : '—';
+    document.getElementById('stat-fw').textContent = Array.isArray(p.frameworks) && p.frameworks.length ? p.frameworks.join(', ') : '—';
+    document.getElementById('stat-mem').textContent = p.stored_memory_count || bs.stored_memory_count || 0;
+    const lastAt = bs.last_bootstrap_at;
+    document.getElementById('stat-last').textContent = lastAt ? new Date(lastAt).toLocaleDateString() : '—';
+    const dot = document.getElementById('stat-dot');
+    const statusEl = document.getElementById('stat-status');
+    if (p.bootstrap_complete) {
+      dot.className = 'stat-dot ok';
+      statusEl.textContent = 'Ready';
+    } else {
+      dot.className = 'stat-dot pending';
+      statusEl.textContent = 'Pending';
+    }
+  } catch (e) {
+    // silently ignore stats errors
+  }
+}
+
+function openAndScroll(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    if (el.tagName === 'DETAILS') { el.open = true; }
+    // adding a slight timeout because sometimes opening a `<details>` tag needs a tick to calculate height before scrolling.
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
+}
 
 function switchTab(tabName) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelector(`.nav-tab[data-tab="${tabName}"]`).classList.add('active');
   document.getElementById('tab-' + tabName).classList.add('active');
-
-  const panelLeft = document.getElementById('panel-left');
-  const panelRight = document.getElementById('panel-right');
-  if (graphTabs.has(tabName)) {
-    panelRight.classList.remove('hidden');
-    panelLeft.classList.add('has-graph');
-  } else {
-    panelRight.classList.add('hidden');
-    panelLeft.classList.remove('has-graph');
-  }
 }
 
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => switchTab(tab.dataset.tab));
 });
 
-// ── Dir picker ────────────────────────────────────
+// ── Dir picker (Create & Bootstrap) ────────────────────────
+const createDirPicker = document.getElementById('create-dir-picker');
+const createDirLabel = document.getElementById('create-dir-picker-label');
+const createDirDisplay = document.getElementById('create-dir-path-display');
+const createPathInput = document.getElementById('create-path');
+
+createDirPicker.addEventListener('change', () => {
+  if (createDirPicker.files.length > 0) {
+    const firstPath = createDirPicker.files[0].webkitRelativePath;
+    const dirName = firstPath.split('/')[0];
+    createDirLabel.classList.add('selected');
+    createDirLabel.childNodes[0].textContent = '📂 ' + dirName;
+    createDirDisplay.textContent = 'Selected: ' + dirName + ' (' + createDirPicker.files.length + ' files)';
+    if (!createPathInput.value) {
+      createPathInput.value = dirName;
+      createPathInput.focus();
+      createPathInput.setSelectionRange(0, 0);
+    }
+  }
+});
+
 const dirPicker = document.getElementById('dir-picker');
 const dirLabel = document.getElementById('dir-picker-label');
 const dirDisplay = document.getElementById('dir-path-display');
@@ -435,18 +723,83 @@ const bootstrapPathInput = document.getElementById('bootstrap-path');
 
 dirPicker.addEventListener('change', () => {
   if (dirPicker.files.length > 0) {
-    // Extract directory path from first file's webkitRelativePath
     const firstPath = dirPicker.files[0].webkitRelativePath;
     const dirName = firstPath.split('/')[0];
     dirLabel.classList.add('selected');
     dirLabel.childNodes[0].textContent = '📂 ' + dirName;
     dirDisplay.textContent = 'Selected: ' + dirName + ' (' + dirPicker.files.length + ' files)';
-    // Put the dir name in the path input so user can prepend their base path
+    // Auto-fill with dir name; user prepends the parent path
     if (!bootstrapPathInput.value) {
-      bootstrapPathInput.placeholder = 'Prepend the parent path, e.g. /Users/you/projects/' + dirName;
+      bootstrapPathInput.value = dirName;
+      bootstrapPathInput.focus();
+      bootstrapPathInput.setSelectionRange(0, 0);
     }
   }
 });
+
+// ── File/folder picker (Push) ─────────────────────
+const pushFilePaths = [];
+const pushFilePicker = document.getElementById('push-file-picker');
+const pushFolderPicker = document.getElementById('push-folder-picker');
+const pushPickerInfo = document.getElementById('push-picker-info');
+const pushFileLabel = document.getElementById('push-file-picker-label');
+const pushFolderLabel = document.getElementById('push-folder-picker-label');
+
+// Helper: read text files and populate push content
+function readFilesIntoContent(fileList) {
+  const contentEl = document.getElementById('push-content');
+  const textFiles = [];
+  let loaded = 0;
+  for (const f of fileList) {
+    // skip binary / non-text
+    if (f.size > 500_000 || (!f.type.startsWith('text/') && !f.name.match(/\.(py|js|ts|jsx|tsx|go|rs|java|kt|md|txt|yaml|yml|toml|json|html|css|sql|sh|env|cfg|ini|xml|csv)$/i))) {
+      continue;
+    }
+    textFiles.push(f);
+  }
+  if (textFiles.length === 0) return;
+  const parts = [];
+  textFiles.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      parts.push('// --- ' + (f.webkitRelativePath || f.name) + ' ---\n' + reader.result);
+      loaded++;
+      if (loaded === textFiles.length) {
+        contentEl.value = parts.join('\n\n');
+      }
+    };
+    reader.readAsText(f);
+  });
+}
+
+pushFilePicker.addEventListener('change', () => {
+  pushFilePaths.length = 0;
+  for (const f of pushFilePicker.files) pushFilePaths.push(f.name);
+  updatePushPickerInfo();
+  pushFileLabel.classList.add('selected');
+  pushFileLabel.childNodes[0].textContent = '📄 ' + pushFilePaths.length + ' file(s)';
+  readFilesIntoContent(pushFilePicker.files);
+});
+
+pushFolderPicker.addEventListener('change', () => {
+  pushFilePaths.length = 0;
+  if (pushFolderPicker.files.length > 0) {
+    for (const f of pushFolderPicker.files) pushFilePaths.push(f.webkitRelativePath);
+    const dirName = pushFolderPicker.files[0].webkitRelativePath.split('/')[0];
+    pushFolderLabel.classList.add('selected');
+    pushFolderLabel.childNodes[0].textContent = '📂 ' + dirName;
+    readFilesIntoContent(pushFolderPicker.files);
+  }
+  updatePushPickerInfo();
+});
+
+function updatePushPickerInfo() {
+  if (pushFilePaths.length === 0) { pushPickerInfo.textContent = ''; return; }
+  const shown = pushFilePaths.slice(0, 5).join(', ');
+  const more = pushFilePaths.length > 5 ? ' … and ' + (pushFilePaths.length - 5) + ' more' : '';
+  pushPickerInfo.textContent = pushFilePaths.length + ' path(s): ' + shown + more;
+  document.getElementById('push-files').value = pushFilePaths.join(', ');
+}
 
 // ── Toast ─────────────────────────────────────────
 function toast(msg, type = 'success') {
@@ -468,7 +821,7 @@ async function loadProjects() {
     data.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.name + ' (' + p.id.slice(0, 8) + '…)';
+      opt.textContent = p.name;
       sel.appendChild(opt);
     });
     if (prev) sel.value = prev;
@@ -571,8 +924,83 @@ async function pushMemory() {
     const data = await res.json();
     toast('Pushed ' + data.stored_items.length + ' item(s)');
     document.getElementById('push-content').value = '';
+    loadProjectStats(pid);
   } catch (e) {
     toast('Push failed: ' + e.message, 'error');
+  }
+}
+
+// ── Create Project & Bootstrap ──────────────────────
+async function createProject() {
+  const path = document.getElementById('create-path').value.trim();
+  const name = document.getElementById('create-name').value.trim();
+  const resultEl = document.getElementById('create-result');
+  const maxFiles = parseInt(document.getElementById('create-max-files').value, 10) || null;
+
+  if (!path) {
+    if (!name) { toast('Please enter a repo path or at least a project name.', 'error'); return; }
+    resultEl.innerHTML = '<span class="spinner"></span> Creating empty project…';
+    resultEl.style.color = 'var(--text-dim)';
+    try {
+      const resp = await fetch(API + '/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name })
+      });
+      if (!resp.ok) { throw new Error(await resp.text()); }
+      const data = await resp.json();
+      resultEl.textContent = `Empty project '${data.project.name}' created!`;
+      resultEl.style.color = 'var(--green)';
+      toast(`Project ${data.project.name} created!`, 'success');
+
+      await loadProjects();
+      const sel = document.getElementById('project-select');
+      sel.value = data.project.id;
+      loadProjectStats(data.project.id);
+
+      // Close 'Create Project' accordion
+      document.getElementById('acc-create').removeAttribute('open');
+    } catch (e) {
+      resultEl.textContent = 'Error: ' + e.message;
+      resultEl.style.color = '#ff6b6b';
+      toast('Failed to create empty project', 'error');
+    }
+  } else {
+    resultEl.innerHTML = '<span class="spinner"></span> Creating & Bootstrapping…';
+    resultEl.style.color = 'var(--text-dim)';
+
+    try {
+      const body = { repo_path: path };
+      if (name) body.project_name = name;
+      if (maxFiles) body.max_scan_files = maxFiles;
+
+      const res = await fetch(API + '/projects/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      resultEl.textContent = '✓ Project Created: ' + data.project_id.slice(0, 8) + '…\n'
+        + 'Stored memories: ' + data.stored_memory_count + '\n'
+        + data.bootstrap_summary;
+      resultEl.style.color = 'var(--green)';
+      toast('Project Created Successfully');
+
+      // Refresh project list and automatically select the newly created project
+      await loadProjects();
+      const sel = document.getElementById('project-select');
+      sel.value = data.project_id;
+      loadProjectStats(data.project_id);
+
+      // Close 'Create Project' accordion
+      document.getElementById('acc-create').removeAttribute('open');
+
+    } catch (e) {
+      resultEl.textContent = '✗ ' + e.message;
+      resultEl.style.color = '#ff6b6b';
+      toast('Creation failed', 'error');
+    }
   }
 }
 
@@ -580,14 +1008,17 @@ async function pushMemory() {
 async function bootstrapProject() {
   const path = document.getElementById('bootstrap-path').value.trim();
   if (!path) { toast('Enter or select a repo path', 'error'); return; }
+  const maxFiles = parseInt(document.getElementById('bootstrap-max-files').value, 10) || null;
   const resultEl = document.getElementById('bootstrap-result');
   resultEl.innerHTML = '<span class="spinner"></span> Bootstrapping…';
 
   try {
+    const body = { repo_path: path };
+    if (maxFiles) body.max_scan_files = maxFiles;
     const res = await fetch(API + '/projects/bootstrap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo_path: path }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -595,7 +1026,10 @@ async function bootstrapProject() {
       + 'Stored memories: ' + data.stored_memory_count + '\n'
       + data.bootstrap_summary;
     toast('Bootstrap complete');
-    loadProjects();
+    loadProjects().then(() => {
+      const sp = document.getElementById('project-select').value;
+      if (sp) loadProjectStats(sp);
+    });
   } catch (e) {
     resultEl.textContent = '✗ ' + e.message;
     toast('Bootstrap failed', 'error');
@@ -605,13 +1039,28 @@ async function bootstrapProject() {
 // ── Knowledge Graph ───────────────────────────────
 let graphNetwork = null;
 
+async function syncGraphIfNeeded(pid) {
+  if (!currentGraphDirty) {
+    return;
+  }
+  const res = await fetch(API + '/graph/' + pid + '/sync', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  const payload = await res.json();
+  currentGraphDirty = Boolean(payload.graph_dirty);
+  currentGraphSyncAt = payload.last_graph_sync_at || null;
+  renderGraphStatusNote();
+  await loadProjectStats(pid);
+}
+
 async function loadGraph() {
   const pid = selectedProject();
   if (!pid) return;
+  renderGraphStatusNote();
   const canvas = document.getElementById('graph-canvas');
   canvas.innerHTML = '<div class="graph-empty"><span class="spinner"></span> Loading graph…</div>';
 
   try {
+    await syncGraphIfNeeded(pid);
     const res = await fetch(API + '/graph/' + pid);
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();

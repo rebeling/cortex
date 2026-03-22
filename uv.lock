@@ -553,6 +553,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cognee" },
     { name = "fastapi" },
+    { name = "jinja2" },
     { name = "mcp" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -571,6 +572,7 @@ requires-dist = [
     { name = "cognee", specifier = "==0.5.5" },
     { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0,<1.0.0" },
+    { name = "jinja2", specifier = ">=3.1.0,<4.0.0" },
     { name = "mcp", specifier = ">=1.20.0,<2.0.0" },
     { name = "pydantic", specifier = ">=2.8.0,<3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0,<9.0.0" },

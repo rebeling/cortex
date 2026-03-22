@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.models.memory import (
+    ChatRequest,
+    ChatResponse,
     ContextRequest,
     ContextResponse,
     IngestRequest,
@@ -63,3 +65,23 @@ async def compose_context(payload: ContextRequest, request: Request) -> ContextR
     except (CogneeUnavailableError, CogneeStorageError) as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return ContextResponse(memory_block=result.memory_block, supporting_items=result.supporting_items)
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
+    try:
+        result = await request.app.state.memory_service.chat(
+            project_id=payload.project_id,
+            query=payload.query,
+            top_k=payload.top_k,
+            file_paths=payload.file_paths,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (CogneeUnavailableError, CogneeStorageError) as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    return ChatResponse(
+        answer=result.answer,
+        answer_mode=result.answer_mode,
+        supporting_items=result.supporting_items,
+    )

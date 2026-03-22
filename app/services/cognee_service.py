@@ -75,35 +75,45 @@ class CogneeService:
 
     @staticmethod
     def _extract_payload(candidate: Any) -> dict[str, Any] | None:
+        metadata: dict[str, Any] = {}
+        candidate_texts: list[str] = []
         if candidate is None:
             return None
         if isinstance(candidate, str):
-            text = candidate
+            candidate_texts.append(candidate)
         elif isinstance(candidate, dict):
-            for key in ("text", "content", "chunk", "raw_text"):
+            for key in ("dataset_id", "dataset_name", "dataset_tenant_id"):
+                if key in candidate:
+                    metadata[key] = candidate[key]
+            for key in ("search_result", "text", "content", "chunk", "raw_text"):
                 if key in candidate and isinstance(candidate[key], str):
-                    text = candidate[key]
-                    break
-            else:
-                text = json.dumps(candidate, default=str)
+                    candidate_texts.append(candidate[key])
+            candidate_texts.append(json.dumps(candidate, default=str))
         else:
-            for attr in ("text", "content", "chunk", "raw_text"):
+            for attr in ("dataset_id", "dataset_name", "dataset_tenant_id"):
+                value = getattr(candidate, attr, None)
+                if value is not None:
+                    metadata[attr] = value
+            for attr in ("search_result", "text", "content", "chunk", "raw_text"):
                 value = getattr(candidate, attr, None)
                 if isinstance(value, str):
-                    text = value
-                    break
-            else:
-                text = str(candidate)
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end <= start:
-            return None
-        try:
-            return json.loads(text[start : end + 1])
-        except json.JSONDecodeError:
-            return None
+                    candidate_texts.append(value)
+            candidate_texts.append(str(candidate))
+        for text in candidate_texts:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start < 0 or end <= start:
+                continue
+            try:
+                payload = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                payload.update(metadata)
+            return payload
+        return None
 
-    async def store_memory_items(self, project_id: str, items: list[MemoryItem]) -> None:
+    async def store_memory_items(self, project_id: str, items: list[MemoryItem], *, rebuild_graph: bool = True) -> None:
         if not items:
             return
         cognee = self._ensure_client()
@@ -115,9 +125,36 @@ class CogneeService:
         )
         try:
             await cognee.add(documents, dataset_name=dataset)
-            await cognee.cognify(datasets=[dataset])
         except Exception as exc:  # pragma: no cover - exercised via API/service tests
             raise CogneeStorageError(f"Cognee storage failed: {exc}") from exc
+        if rebuild_graph:
+            await self.sync_graph(project_id)
+
+    async def sync_graph(self, project_id: str) -> None:
+        cognee = self._ensure_client()
+        dataset = self.dataset_name(project_id)
+        logger.info("syncing graph", extra={"project_id": project_id, "dataset": dataset})
+        try:
+            await cognee.cognify(datasets=[dataset])
+        except Exception as exc:  # pragma: no cover - exercised via API/service tests
+            raise CogneeStorageError(f"Cognee graph sync failed: {exc}") from exc
+
+    async def generate_graph_visualization(self, project_id: str, output_path: Path | str) -> Path:
+        self._ensure_client()
+        dataset = self.dataset_name(project_id)
+        path = Path(output_path).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "generating graph visualization",
+            extra={"project_id": project_id, "dataset": dataset, "output_path": str(path)},
+        )
+        try:
+            from cognee.api.v1.visualize.visualize import visualize_graph
+
+            await visualize_graph(str(path))
+        except Exception as exc:  # pragma: no cover - exercised via API/service tests
+            raise CogneeStorageError(f"Cognee graph visualization failed: {exc}") from exc
+        return path
 
     async def search_memory(self, project_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
         cognee = self._ensure_client()
@@ -144,28 +181,44 @@ class CogneeService:
         return payloads
 
     async def get_graph(self, project_id: str) -> list[dict[str, str]]:
-        """Return knowledge-graph triples for a project via Cognee INSIGHTS search."""
-        cognee = self._ensure_client()
-        from cognee import SearchType
-
+        """Return knowledge-graph triples for a project."""
+        self._ensure_client()
         dataset = self.dataset_name(project_id)
         logger.info("fetching graph triples", extra={"project_id": project_id, "dataset": dataset})
+
         try:
-            raw = await cognee.search(
-                "",
-                query_type=SearchType.INSIGHTS,
-                datasets=[dataset],
-            )
+            import cognee.infrastructure.databases.graph as g
+            engine = await g.get_graph_engine()
+            # In KuzuDB adapter for Cognee, get_graph_data() typically returns (nodes, edges) where edges are dicts
+            data = await engine.get_graph_data()
         except Exception as exc:  # pragma: no cover
             raise CogneeStorageError(f"Cognee graph query failed: {exc}") from exc
+
+        # Unpack edges from data
+        # We expect data to be either a list of edges, or a tuple (nodes, edges)
+        edges = []
+        if isinstance(data, tuple) and len(data) == 2:
+            edges = data[1]
+        elif isinstance(data, list):
+            edges = data
+
+        logger.info("graph raw results", extra={"count": len(edges)})
+
         triples: list[dict[str, str]] = []
-        for item in raw:
-            if isinstance(item, (list, tuple)) and len(item) >= 3:
-                triples.append({"source": str(item[0]), "relation": str(item[1]), "target": str(item[2])})
-            elif isinstance(item, dict):
-                src = item.get("source") or item.get("subject") or item.get("from", "")
-                rel = item.get("relation") or item.get("predicate") or item.get("type", "")
-                tgt = item.get("target") or item.get("object") or item.get("to", "")
+        for item in edges:
+            if isinstance(item, dict):
+                src = item.get("source_node_id") or item.get("source") or item.get("from") or ""
+                rel = item.get("relationship_name") or item.get("relation") or item.get("type") or ""
+                tgt = item.get("target_node_id") or item.get("target") or item.get("to") or ""
                 if src and tgt:
                     triples.append({"source": str(src), "relation": str(rel), "target": str(tgt)})
+            elif hasattr(item, "__dict__"):
+                src = getattr(item, "source_node_id", None) or getattr(item, "source", None)
+                rel = getattr(item, "relationship_name", None) or getattr(item, "relation", None)
+                tgt = getattr(item, "target_node_id", None) or getattr(item, "target", None)
+                if src and tgt:
+                    triples.append({"source": str(src), "relation": str(rel), "target": str(tgt)})
+
+        # Filter out node nodes pointing to themselves or noisy technical nodes if needed
+        logger.info("graph parsed triples", extra={"count": len(triples)})
         return triples

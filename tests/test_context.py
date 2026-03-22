@@ -29,3 +29,5 @@ def test_context_returns_prompt_ready_memory_block(client, project_id: str) -> N
     payload = response.json()
     assert payload["memory_block"].startswith("Relevant project memory:")
     assert payload["supporting_items"]
+    assert payload["supporting_items"][0]["dataset_id"] == project_id
+    assert payload["supporting_items"][0]["dataset_name"] == f"cortex_project_{project_id}"

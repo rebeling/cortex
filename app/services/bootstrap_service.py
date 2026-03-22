@@ -116,7 +116,8 @@ class BootstrapService:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             return handle.read(limit)
 
-    def _collect_files(self, repo_path: Path) -> list[Path]:
+    def _collect_files(self, repo_path: Path, max_scan_files: int | None = None) -> list[Path]:
+        limit = max_scan_files or self._settings.max_scan_files
         files: list[Path] = []
         root_priority: list[Path] = []
         for child in sorted(repo_path.iterdir(), key=lambda value: value.name):
@@ -143,7 +144,7 @@ class BootstrapService:
                     continue
                 if self._is_candidate_file(resolved, repo_path):
                     files.append(resolved)
-                if len(files) >= self._settings.max_scan_files:
+                if len(files) >= limit:
                     return files
         return files
 
@@ -238,8 +239,8 @@ class BootstrapService:
         first_lines = " ".join(line.strip() for line in text.splitlines()[:6] if line.strip())
         return f"{path} highlights: {first_lines[:240]}".strip()
 
-    def _scan_repository(self, repo_path: Path) -> dict[str, Any]:
-        files = self._collect_files(repo_path)
+    def _scan_repository(self, repo_path: Path, max_scan_files: int | None = None) -> dict[str, Any]:
+        files = self._collect_files(repo_path, max_scan_files=max_scan_files)
         file_text: dict[str, str] = {}
         dependency_files: list[str] = []
         config_summaries: dict[str, str] = {}
@@ -311,7 +312,40 @@ class BootstrapService:
     def _write_json(path: Path, payload: dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
-    async def bootstrap(self, repo_path: str, project_name: str | None = None) -> BootstrapArtifacts:
+    def _status_file_for_project(self, project: ProjectModel) -> Path | None:
+        if not project.repo_path:
+            return None
+        return Path(project.repo_path) / ".cortex" / "bootstrap_status.json"
+
+    def mark_graph_dirty(self, project: ProjectModel) -> None:
+        updated_project = project.model_copy(update={"graph_dirty": True})
+        self._registry_service.upsert_project(updated_project)
+        status_file = self._status_file_for_project(updated_project)
+        if status_file is None or not status_file.exists():
+            return
+        try:
+            payload = json.loads(status_file.read_text(encoding="utf-8"))
+            payload["graph_dirty"] = True
+            self._write_json(status_file, payload)
+        except Exception as exc:
+            logger.warning("failed to mark graph dirty", exc_info=exc)
+
+    def mark_graph_synced(self, project: ProjectModel, synced_at: datetime | None = None) -> ProjectModel:
+        actual_synced_at = synced_at or datetime.now(timezone.utc)
+        updated_project = project.model_copy(update={"graph_dirty": False, "last_graph_sync_at": actual_synced_at})
+        self._registry_service.upsert_project(updated_project)
+        status_file = self._status_file_for_project(updated_project)
+        if status_file is not None and status_file.exists():
+            try:
+                payload = json.loads(status_file.read_text(encoding="utf-8"))
+                payload["graph_dirty"] = False
+                payload["last_graph_sync_at"] = actual_synced_at.isoformat()
+                self._write_json(status_file, payload)
+            except Exception as exc:
+                logger.warning("failed to mark graph synced", exc_info=exc)
+        return updated_project
+
+    async def bootstrap(self, repo_path: str, project_name: str | None = None, *, max_scan_files: int | None = None) -> BootstrapArtifacts:
         repo_root = self._validate_repo_path(repo_path)
         canonical_identity = self._canonical_identity(repo_root)
         project_id = self._project_id(canonical_identity)
@@ -340,8 +374,10 @@ class BootstrapService:
                 languages=[],
                 frameworks=[],
                 bootstrap_complete=False,
+                graph_dirty=False,
+                last_graph_sync_at=None,
             )
-        scan = self._scan_repository(repo_root)
+        scan = self._scan_repository(repo_root, max_scan_files=max_scan_files)
         project = project.model_copy(
             update={
                 "name": actual_project_name,
@@ -351,6 +387,8 @@ class BootstrapService:
                 "languages": scan["languages"],
                 "frameworks": scan["frameworks"],
                 "bootstrap_complete": True,
+                "graph_dirty": existing_project.graph_dirty if existing_project else project.graph_dirty,
+                "last_graph_sync_at": existing_project.last_graph_sync_at if existing_project else project.last_graph_sync_at,
             }
         )
         bootstrap_run_id = str(uuid.uuid4())
@@ -371,11 +409,15 @@ class BootstrapService:
             "last_bootstrap_at": now.isoformat(),
             "bootstrap_run_id": bootstrap_run_id,
             "stored_memory_count": 0,
+            "graph_dirty": project.graph_dirty,
+            "last_graph_sync_at": project.last_graph_sync_at.isoformat() if project.last_graph_sync_at else None,
             "warnings": [],
         }
         if status_file.exists():
             previous_status = json.loads(status_file.read_text(encoding="utf-8"))
             status_payload["stored_memory_count"] = int(previous_status.get("stored_memory_count", 0))
+            status_payload["graph_dirty"] = bool(previous_status.get("graph_dirty", project.graph_dirty))
+            status_payload["last_graph_sync_at"] = previous_status.get("last_graph_sync_at")
         else:
             created_files.append(".cortex/bootstrap_status.json")
         self._registry_service.upsert_project(project)
@@ -410,6 +452,9 @@ class BootstrapService:
             for fingerprint in deduped_fingerprints:
                 self._registry_service.remember_fingerprint(project.id, fingerprint)
             stored_count = len(deduped_items)
+            project = self.mark_graph_synced(project, synced_at=now)
+            status_payload["graph_dirty"] = False
+            status_payload["last_graph_sync_at"] = now.isoformat()
         status_payload["stored_memory_count"] = stored_count
         self._write_json(status_file, status_payload)
         logger.info(
@@ -423,17 +468,44 @@ class BootstrapService:
             stored_memory_count=stored_count,
         )
 
+    def increment_memory_count(self, project: ProjectModel, count: int) -> ProjectModel:
+        """Increment the stored_memory_count in the project's bootstrap_status.json."""
+        updated_project = project.model_copy(update={"stored_memory_count": project.stored_memory_count + count})
+        self._registry_service.upsert_project(updated_project)
+        if not updated_project.repo_path:
+            return updated_project
+        repo_root = Path(updated_project.repo_path)
+        cortex_dir = repo_root / ".cortex"
+        status_file = cortex_dir / "bootstrap_status.json"
+        if status_file.exists():
+            try:
+                payload = json.loads(status_file.read_text(encoding="utf-8"))
+                payload["stored_memory_count"] = int(payload.get("stored_memory_count", 0)) + count
+                self._write_json(status_file, payload)
+            except Exception as e:
+                logger.warning("failed to increment memory count", exc_info=e)
+        return updated_project
+
     def get_project(self, project_id: str) -> tuple[ProjectModel, dict[str, Any], dict[str, bool]]:
         project = self._registry_service.get_project(project_id)
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
-        cortex_dir = Path(project.repo_path) / ".cortex"
-        status_file = cortex_dir / "bootstrap_status.json"
-        status_payload = json.loads(status_file.read_text(encoding="utf-8")) if status_file.exists() else {}
+
+        status_payload = {}
         cortex_files = {
-            ".cortex/project.yaml": (cortex_dir / "project.yaml").exists(),
-            ".cortex/brief.md": (cortex_dir / "brief.md").exists(),
-            ".cortex/repo_map.json": (cortex_dir / "repo_map.json").exists(),
-            ".cortex/bootstrap_status.json": status_file.exists(),
+            ".cortex/project.yaml": False,
+            ".cortex/brief.md": False,
+            ".cortex/repo_map.json": False,
+            ".cortex/bootstrap_status.json": False,
         }
+
+        if project.repo_path:
+            cortex_dir = Path(project.repo_path) / ".cortex"
+            status_file = cortex_dir / "bootstrap_status.json"
+            status_payload = json.loads(status_file.read_text(encoding="utf-8")) if status_file.exists() else {}
+            cortex_files[".cortex/project.yaml"] = (cortex_dir / "project.yaml").exists()
+            cortex_files[".cortex/brief.md"] = (cortex_dir / "brief.md").exists()
+            cortex_files[".cortex/repo_map.json"] = (cortex_dir / "repo_map.json").exists()
+            cortex_files[".cortex/bootstrap_status.json"] = status_file.exists()
+
         return project, status_payload, cortex_files

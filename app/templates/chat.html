@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Cortex - Chat{% endblock %}
+{% block description %}Ask questions against stored project memory.{% endblock %}
+
+{% block content %}
+  <div class="page-shell">
+    <div class="page-panel narrow">
+      <div class="chat-column">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <input id="chat-input" type="text" placeholder="Ask about your project memory..." autocomplete="off">
+          <button class="btn-primary" id="chat-send" onclick="sendChat()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    const chatInput = document.getElementById('chat-input');
+
+    chatInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        sendChat();
+      }
+    });
+
+    function addMsg(content, who, isHtml) {
+      const el = document.createElement('div');
+      el.className = 'msg msg-' + (who === 'user' ? 'user' : 'bot');
+      const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      el.id = id;
+      if (isHtml) {
+        el.innerHTML = content;
+      } else {
+        el.textContent = content;
+      }
+      const box = document.getElementById('chat-messages');
+      box.appendChild(el);
+      box.scrollTop = box.scrollHeight;
+      return id;
+    }
+
+    function removeMsg(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.remove();
+      }
+    }
+
+    function compactDatasetName(value) {
+      if (!value) return null;
+      return value.length > 48 ? value.slice(0, 45) + '...' : value;
+    }
+
+    function compactText(value, limit = 180) {
+      if (!value) return '';
+      const compact = String(value).replace(/\s+/g, ' ').trim();
+      if (!compact) return '';
+      return compact.length > limit ? compact.slice(0, limit - 3) + '...' : compact;
+    }
+
+    function renderSupportItem(item) {
+      const chips = [];
+      if (typeof item.score === 'number') {
+        chips.push('<span class="support-chip">score ' + escHtml(item.score.toFixed(4)) + '</span>');
+      }
+      if (item.dataset_name) {
+        chips.push('<span class="support-chip">' + escHtml(compactDatasetName(item.dataset_name)) + '</span>');
+      }
+      if (item.dataset_id) {
+        chips.push('<span class="support-chip">dataset ' + escHtml(item.dataset_id) + '</span>');
+      }
+      if (item.reason) {
+        chips.push('<span class="support-chip">' + escHtml(item.reason) + '</span>');
+      }
+      const snippet = compactText(item.item && item.item.content ? item.item.content : '');
+      let html = '<div class="support-item"><strong>' + escHtml(item.item && item.item.title ? item.item.title : 'match') + '</strong>';
+      if (chips.length) {
+        html += '<div class="support-meta">' + chips.join('') + '</div>';
+      }
+      if (snippet) {
+        html += '<div class="support-snippet">' + escHtml(snippet) + '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    async function sendChat() {
+      const pid = selectedProject();
+      if (!pid) return;
+      const query = chatInput.value.trim();
+      if (!query) return;
+      chatInput.value = '';
+
+      addMsg(query, 'user');
+      const loadId = addMsg('<span class="spinner"></span> Thinking...', 'bot', true);
+
+      try {
+        const res = await fetch(API + '/memory/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: pid, query, top_k: 6 }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        removeMsg(loadId);
+
+        let html = '<div class="memory-block">' + escHtml(data.answer) + '</div>';
+        if (data.supporting_items && data.supporting_items.length) {
+          data.supporting_items.forEach(si => {
+            html += renderSupportItem(si);
+          });
+        }
+        addMsg(html, 'bot', true);
+      } catch (error) {
+        removeMsg(loadId);
+        addMsg('Error: ' + error.message, 'bot');
+      }
+    }
+  </script>
+{% endblock %}

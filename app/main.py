@@ -5,9 +5,9 @@ import logging
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Mount
 
@@ -18,6 +18,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.mcp_server import create_mcp_server
 from app.services.bootstrap_service import BootstrapService
+from app.services.chat_service import ChatService
 from app.services.cognee_service import CogneeService
 from app.services.context_service import ContextService
 from app.services.extraction_service import ExtractionService
@@ -28,6 +29,7 @@ from app.services.retrieval_service import RetrievalService
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 
 def create_app(settings: Settings | None = None, cognee_service: CogneeService | None = None) -> FastAPI:
@@ -40,7 +42,9 @@ def create_app(settings: Settings | None = None, cognee_service: CogneeService |
     cognee_service = cognee_service or CogneeService(settings)
     retrieval_service = RetrievalService(cognee_service)
     context_service = ContextService()
+    chat_service = ChatService(settings)
     bootstrap_service = BootstrapService(settings, extraction_service, cognee_service, registry_service)
+    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     memory_service = MemoryService(
         registry_service,
         bootstrap_service,
@@ -48,6 +52,7 @@ def create_app(settings: Settings | None = None, cognee_service: CogneeService |
         cognee_service,
         retrieval_service,
         context_service,
+        chat_service,
     )
 
     @contextlib.asynccontextmanager
@@ -73,6 +78,8 @@ def create_app(settings: Settings | None = None, cognee_service: CogneeService |
     app.state.context_service = context_service
     app.state.bootstrap_service = bootstrap_service
     app.state.memory_service = memory_service
+    app.state.chat_service = chat_service
+    app.state.templates = templates
     app.state.mcp_server = create_mcp_server(app.state)
     app.router.routes.append(Mount("/mcp", app=app.state.mcp_server.streamable_http_app()))
     app.include_router(projects_router)
@@ -84,8 +91,20 @@ def create_app(settings: Settings | None = None, cognee_service: CogneeService |
         return {"status": "ok"}
 
     @app.get("/")
-    async def root():
-        return FileResponse(STATIC_DIR / "index.html")
+    async def root(request: Request):
+        return templates.TemplateResponse(request=request, name="cognee.html", context={"active_page": "cognee"})
+
+    @app.get("/cognee")
+    async def cognee_page(request: Request):
+        return templates.TemplateResponse(request=request, name="cognee.html", context={"active_page": "cognee"})
+
+    @app.get("/chat")
+    async def chat_page(request: Request):
+        return templates.TemplateResponse(request=request, name="chat.html", context={"active_page": "chat"})
+
+    @app.get("/graph")
+    async def graph_page(request: Request):
+        return templates.TemplateResponse(request=request, name="graph.html", context={"active_page": "graph"})
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
