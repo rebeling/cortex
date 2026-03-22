@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -29,6 +30,9 @@ class BootstrapArtifacts:
     created_files: list[str]
     bootstrap_summary: str
     stored_memory_count: int
+    memories_created: int
+    files_scanned: int
+    files_imported: int | None = None
 
 
 class BootstrapService:
@@ -61,6 +65,9 @@ class BootstrapService:
         ):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="repo_path is outside allowed roots")
         return real_path
+
+    def _imports_root(self) -> Path:
+        return (self._settings.service_data_dir / "imports").resolve()
 
     @staticmethod
     def _run_git(repo_path: Path, args: list[str]) -> str | None:
@@ -111,6 +118,62 @@ class BootstrapService:
                 return True
         return path.suffix.lower() in self._settings.candidate_extensions
 
+    def _has_hidden_parts(self, path: Path, repo_root: Path) -> bool:
+        try:
+            relative_parts = path.relative_to(repo_root).parts
+        except ValueError:
+            return True
+        return any(part.startswith(".") for part in relative_parts)
+
+    def _is_excluded_dir_name(self, dirname: str) -> bool:
+        return dirname.startswith(".") or dirname in self._settings.excluded_dirs
+
+    def _is_scannable_file(self, path: Path, repo_root: Path, files: list[Path]) -> bool:
+        if self._has_hidden_parts(path, repo_root):
+            return False
+        if not path.is_relative_to(repo_root) or path in files:
+            return False
+        if not path.is_file() or path.stat().st_size > self._settings.max_file_size_bytes:
+            return False
+        return self._is_candidate_file(path, repo_root)
+
+    def _git_ls_files(self, repo_path: Path, args: list[str]) -> list[Path] | None:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_path), "ls-files", "-z", *args],
+            capture_output=True,
+            text=False,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return None
+        entries = [entry for entry in completed.stdout.decode("utf-8", errors="ignore").split("\0") if entry]
+        resolved_paths: list[Path] = []
+        for entry in entries:
+            candidate = (repo_path / entry).resolve(strict=False)
+            if candidate.exists():
+                resolved_paths.append(candidate)
+        return resolved_paths
+
+    def _collect_git_files(self, repo_path: Path, limit: int) -> list[Path] | None:
+        tracked_files = self._git_ls_files(repo_path, [])
+        if tracked_files is None:
+            return None
+        untracked_files = self._git_ls_files(repo_path, ["--others", "--exclude-standard"]) or []
+        files: list[Path] = []
+        for candidate in tracked_files + untracked_files:
+            try:
+                if self._is_scannable_file(candidate, repo_path, files):
+                    files.append(candidate)
+            except OSError:
+                continue
+            if len(files) >= limit:
+                return files
+        # If git succeeded but found no scannable files, return None to trigger fallback scanning
+        # This handles cases like imported directories where git works but files aren't tracked
+        if not files:
+            return None
+        return files
+
     @staticmethod
     def _safe_read(path: Path, limit: int) -> str:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
@@ -118,10 +181,13 @@ class BootstrapService:
 
     def _collect_files(self, repo_path: Path, max_scan_files: int | None = None) -> list[Path]:
         limit = max_scan_files or self._settings.max_scan_files
+        git_files = self._collect_git_files(repo_path, limit)
+        if git_files is not None:
+            return git_files
         files: list[Path] = []
         root_priority: list[Path] = []
         for child in sorted(repo_path.iterdir(), key=lambda value: value.name):
-            if child.is_file() and self._is_candidate_file(child, repo_path):
+            if child.is_file() and not child.name.startswith(".") and self._is_candidate_file(child, repo_path):
                 root_priority.append(child)
         files.extend(root_priority)
         for root, dirnames, filenames in os.walk(repo_path, topdown=True, followlinks=False):
@@ -129,21 +195,22 @@ class BootstrapService:
             dirnames[:] = [
                 dirname
                 for dirname in dirnames
-                if dirname not in self._settings.excluded_dirs
+                if not self._is_excluded_dir_name(dirname)
                 and (root_path / dirname).resolve().is_relative_to(repo_path)
             ]
             for filename in sorted(filenames):
+                if filename.startswith("."):
+                    continue
                 file_path = root_path / filename
                 try:
                     resolved = file_path.resolve(strict=True)
                 except OSError:
                     continue
-                if not resolved.is_relative_to(repo_path) or resolved in files:
+                try:
+                    if self._is_scannable_file(resolved, repo_path, files):
+                        files.append(resolved)
+                except OSError:
                     continue
-                if not resolved.is_file() or resolved.stat().st_size > self._settings.max_file_size_bytes:
-                    continue
-                if self._is_candidate_file(resolved, repo_path):
-                    files.append(resolved)
                 if len(files) >= limit:
                     return files
         return files
@@ -239,7 +306,7 @@ class BootstrapService:
         first_lines = " ".join(line.strip() for line in text.splitlines()[:6] if line.strip())
         return f"{path} highlights: {first_lines[:240]}".strip()
 
-    def _scan_repository(self, repo_path: Path, max_scan_files: int | None = None) -> dict[str, Any]:
+    def _scan_repository(self, repo_path: Path, max_scan_files: int | None = None) -> tuple[dict[str, Any], dict[str, str]]:
         files = self._collect_files(repo_path, max_scan_files=max_scan_files)
         file_text: dict[str, str] = {}
         dependency_files: list[str] = []
@@ -280,7 +347,38 @@ class BootstrapService:
             "entrypoints": entrypoints,
             "important_folders": important_folders,
             "config_summaries": config_summaries,
-        }
+        }, file_text
+
+    @staticmethod
+    def _sanitize_import_path(relative_path: str) -> Path | None:
+        cleaned = relative_path.replace("\\", "/").strip().lstrip("/")
+        if not cleaned:
+            return None
+        candidate = Path(cleaned)
+        if candidate.is_absolute():
+            return None
+        if any(part in {"", ".", ".."} for part in candidate.parts):
+            return None
+        return candidate
+
+    def _write_imported_files(
+        self,
+        workspace_root: Path,
+        files: list[tuple[str, bytes]],
+    ) -> None:
+        for relative_path, content in files:
+            candidate = self._sanitize_import_path(relative_path)
+            if candidate is None:
+                continue
+            if any(part.startswith(".") or part in self._settings.excluded_dirs for part in candidate.parts):
+                continue
+            if len(content) > self._settings.max_file_size_bytes:
+                continue
+            destination = (workspace_root / candidate).resolve()
+            if not destination.is_relative_to(workspace_root):
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
 
     @staticmethod
     def _project_brief(project: ProjectModel, scan: dict[str, Any]) -> str:
@@ -345,11 +443,18 @@ class BootstrapService:
                 logger.warning("failed to mark graph synced", exc_info=exc)
         return updated_project
 
-    async def bootstrap(self, repo_path: str, project_name: str | None = None, *, max_scan_files: int | None = None) -> BootstrapArtifacts:
-        repo_root = self._validate_repo_path(repo_path)
-        canonical_identity = self._canonical_identity(repo_root)
-        project_id = self._project_id(canonical_identity)
-        actual_project_name = self._infer_project_name(repo_root, project_name)
+    async def _bootstrap_repo_root(
+        self,
+        repo_root: Path,
+        project_name: str | None = None,
+        *,
+        max_scan_files: int | None = None,
+        files_imported: int | None = None,
+        project_override: ProjectModel | None = None,
+    ) -> BootstrapArtifacts:
+        canonical_identity = project_override.canonical_identity if project_override else self._canonical_identity(repo_root)
+        project_id = project_override.id if project_override else self._project_id(canonical_identity)
+        actual_project_name = project_name or (project_override.name if project_override else self._infer_project_name(repo_root, project_name))
         repo_commit = self._repo_commit(repo_root)
         cortex_dir = repo_root / ".cortex"
         project_file = cortex_dir / "project.yaml"
@@ -358,7 +463,7 @@ class BootstrapService:
         status_file = cortex_dir / "bootstrap_status.json"
         created_files: list[str] = []
         now = datetime.now(timezone.utc)
-        existing_project = self._registry_service.get_project(project_id)
+        existing_project = project_override or self._registry_service.get_project(project_id)
         project_exists = project_file.exists()
         if project_file.exists():
             payload = yaml.safe_load(project_file.read_text(encoding="utf-8")) or {}
@@ -377,7 +482,7 @@ class BootstrapService:
                 graph_dirty=False,
                 last_graph_sync_at=None,
             )
-        scan = self._scan_repository(repo_root, max_scan_files=max_scan_files)
+        scan, file_text = self._scan_repository(repo_root, max_scan_files=max_scan_files)
         project = project.model_copy(
             update={
                 "name": actual_project_name,
@@ -421,18 +526,40 @@ class BootstrapService:
         else:
             created_files.append(".cortex/bootstrap_status.json")
         self._registry_service.upsert_project(project)
-        stored_count = 0
+        existing_file_index = self._registry_service.get_file_memory_index(project.id)
+        next_file_index: dict[str, dict[str, str]] = {}
+        changed_file_text: dict[str, str] = {}
+        for relative_path, text in file_text.items():
+            source_hash = self._extraction_service.hash_text(text)
+            existing_entry = existing_file_index.get(relative_path)
+            if existing_entry and existing_entry.get("source_hash") == source_hash and existing_entry.get("memory_id"):
+                next_file_index[relative_path] = existing_entry
+                continue
+            changed_file_text[relative_path] = text
+        memories_created = 0
+        summary_items: list[MemoryItem] = []
         if not project_exists:
-            items = self._extraction_service.extract_bootstrap_items(
+            summary_items = self._extraction_service.extract_bootstrap_items(
                 project_id=project.id,
                 project_name=project.name,
                 scan=scan,
                 repo_commit=repo_commit,
                 run_id=bootstrap_run_id,
             )
+        file_items = self._extraction_service.extract_bootstrap_file_items(
+            project_id=project.id,
+            file_text=changed_file_text,
+            repo_commit=repo_commit,
+            run_id=bootstrap_run_id,
+        )
+        items = summary_items + file_items
+        if items:
             deduped_items = []
             deduped_fingerprints = []
             for item in items:
+                if item.source_type == "repository_file":
+                    deduped_items.append(item)
+                    continue
                 fingerprint = self._extraction_service.fingerprint(item)
                 if self._registry_service.has_fingerprint(project.id, fingerprint):
                     continue
@@ -451,21 +578,101 @@ class BootstrapService:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
             for fingerprint in deduped_fingerprints:
                 self._registry_service.remember_fingerprint(project.id, fingerprint)
-            stored_count = len(deduped_items)
+            for item in deduped_items:
+                if item.source_type == "repository_file" and item.file_paths:
+                    next_file_index[item.file_paths[0]] = {
+                        "memory_id": item.id,
+                        "source_hash": item.source_hash,
+                    }
+            memories_created = len(deduped_items)
             project = self.mark_graph_synced(project, synced_at=now)
             status_payload["graph_dirty"] = False
             status_payload["last_graph_sync_at"] = now.isoformat()
-        status_payload["stored_memory_count"] = stored_count
+        existing_total_count = existing_project.stored_memory_count if existing_project else 0
+        summary_memory_count = len(summary_items) if not project_exists else max(existing_total_count - len(existing_file_index), 0)
+        active_total_count = summary_memory_count + len(next_file_index)
+        project = project.model_copy(update={"stored_memory_count": active_total_count})
+        self._registry_service.upsert_project(project)
+        self._registry_service.replace_file_memory_index(project.id, next_file_index)
+        status_payload["stored_memory_count"] = active_total_count
         self._write_json(status_file, status_payload)
         logger.info(
             "bootstrapped project",
-            extra={"project_id": project.id, "repo_path": str(repo_root), "stored_memory_count": stored_count},
+            extra={"project_id": project.id, "repo_path": str(repo_root), "stored_memory_count": active_total_count},
         )
         return BootstrapArtifacts(
             project=project,
             created_files=created_files,
             bootstrap_summary=self._bootstrap_summary(project, scan),
-            stored_memory_count=stored_count,
+            stored_memory_count=active_total_count,
+            memories_created=memories_created,
+            files_scanned=scan["files_scanned"],
+            files_imported=files_imported,
+        )
+
+    async def bootstrap(self, repo_path: str, project_name: str | None = None, *, max_scan_files: int | None = None) -> BootstrapArtifacts:
+        repo_root = self._validate_repo_path(repo_path)
+        return await self._bootstrap_repo_root(repo_root, project_name, max_scan_files=max_scan_files)
+
+    async def bootstrap_import(
+        self,
+        *,
+        folder_name: str,
+        files: list[tuple[str, bytes]],
+        project_name: str | None = None,
+        max_scan_files: int | None = None,
+    ) -> BootstrapArtifacts:
+        import_id = str(uuid.uuid4())
+        sanitized_folder = re.sub(r"[^A-Za-z0-9._-]+", "-", folder_name).strip("-") or "imported-repo"
+        workspace_root = (self._imports_root() / import_id / sanitized_folder).resolve()
+        if workspace_root.exists():
+            shutil.rmtree(workspace_root)
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        self._write_imported_files(workspace_root, files)
+        if not any(workspace_root.rglob("*")):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="no importable files remained after filtering",
+            )
+        actual_project_name = project_name or sanitized_folder
+        return await self._bootstrap_repo_root(
+            workspace_root,
+            actual_project_name,
+            max_scan_files=max_scan_files,
+            files_imported=len(files),
+        )
+
+    async def rebootstrap_import(
+        self,
+        *,
+        project_id: str,
+        folder_name: str,
+        files: list[tuple[str, bytes]],
+        max_scan_files: int | None = None,
+    ) -> BootstrapArtifacts:
+        project = self._registry_service.get_project(project_id)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
+
+        sanitized_folder = re.sub(r"[^A-Za-z0-9._-]+", "-", folder_name).strip("-") or "imported-repo"
+        project_import_root = (self._imports_root() / project.id).resolve()
+        workspace_root = (project_import_root / sanitized_folder).resolve()
+        if project_import_root.exists():
+            shutil.rmtree(project_import_root, ignore_errors=True)
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        self._write_imported_files(workspace_root, files)
+        if not any(workspace_root.rglob("*")):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="no importable files remained after filtering",
+            )
+
+        return await self._bootstrap_repo_root(
+            workspace_root,
+            project.name,
+            max_scan_files=max_scan_files,
+            files_imported=len(files),
+            project_override=project,
         )
 
     def increment_memory_count(self, project: ProjectModel, count: int) -> ProjectModel:
@@ -509,3 +716,21 @@ class BootstrapService:
             cortex_files[".cortex/bootstrap_status.json"] = status_file.exists()
 
         return project, status_payload, cortex_files
+
+    def delete_project(self, project_id: str) -> None:
+        project = self._registry_service.delete_project(project_id)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
+
+        if not project.repo_path:
+            return
+
+        repo_path = Path(project.repo_path)
+        imports_root = self._imports_root()
+        try:
+            resolved_repo = repo_path.resolve()
+        except OSError:
+            return
+
+        if resolved_repo.is_relative_to(imports_root) and resolved_repo.exists():
+            shutil.rmtree(resolved_repo.parent, ignore_errors=True)

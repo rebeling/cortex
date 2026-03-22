@@ -8,8 +8,7 @@
     <div class="page-panel">
       <div style="display: flex; gap: 12px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); align-items: center; flex-wrap: wrap;">
         <button class="btn-primary" style="background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);" onclick="openAndScroll('acc-push')">Push</button>
-        <button class="btn-primary" style="background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);" onclick="openAndScroll('acc-bootstrap')">Bootstrap</button>
-        <button class="btn-primary" id="open-create-project-modal" style="margin-left:auto;" onclick="openCreateProjectModal()">New Project</button>
+        <button class="btn-primary" id="open-create-project-modal" style="margin-left:auto;" onclick="openCreateProjectModal()">Bootstrap</button>
       </div>
 
       <div class="stats-card" id="acc-stats">
@@ -18,6 +17,15 @@
             <div class="stats-card-title">Project Stats</div>
             <div class="stats-card-subtitle">runtime snapshot / memory index / graph state</div>
           </div>
+          <button
+            class="btn-secondary"
+            id="delete-project-button"
+            type="button"
+            onclick="deleteSelectedProject()"
+            style="display:none; border-color:#a53b52; color:#f8a5b8;"
+          >
+            Delete Project
+          </button>
         </div>
         <div class="stats-grid">
           <div class="stat-item project-name"><span class="stat-icon">$</span><span class="stat-value" id="stat-name">—</span></div>
@@ -36,11 +44,11 @@
       <details class="cortex-accordion" id="acc-push">
         <summary>Push Memory</summary>
         <div class="cortex-accordion-content push-area">
-          <div class="info-box">
-            <strong>Push memory into Cortex.</strong>
+
+            <h3>Push memory into Cortex.</h3>
             Send structured content to be stored as memory.
-          </div>
-          <div class="form-group">
+
+            <div class="form-group">
             <label>Content to push into memory</label>
             <textarea id="push-content" placeholder="Paste or type content here..." style="min-height: 120px;"></textarea>
           </div>
@@ -70,32 +78,6 @@
         </div>
       </details>
 
-      <details class="cortex-accordion" id="acc-bootstrap">
-        <summary>Bootstrap / Re-scan Project</summary>
-        <div class="cortex-accordion-content">
-          <div class="info-box">
-            <strong>Re-scan selected project.</strong>
-            Updates languages, frameworks, and foundational memory without duplicating existing items.
-          </div>
-          <div class="form-group">
-            <label>Repository folder to re-scan</label>
-            <div class="input-row">
-              <label class="picker-btn" id="dir-picker-label">
-                📂 Directory...
-                <input type="file" webkitdirectory class="picker-hidden" id="dir-picker">
-              </label>
-            </div>
-            <div class="picker-info" id="dir-path-display"></div>
-            <input id="bootstrap-path" type="text" placeholder="/absolute/path/to/repo" style="margin-top: 8px;">
-          </div>
-          <div class="form-group">
-            <label>Max files to scan <span style="color:var(--text-dim);">(lower for quick test)</span></label>
-            <input id="bootstrap-max-files" type="number" min="1" max="5000" value="10" style="max-width:140px;">
-          </div>
-          <button class="btn-primary" onclick="bootstrapProject()" style="align-self:flex-start;">Re-scan Project</button>
-          <div id="bootstrap-result" style="font-size:13px; color:var(--text-dim); white-space:pre-wrap; margin-top: 12px;"></div>
-        </div>
-      </details>
     </div>
   </div>
 
@@ -103,16 +85,18 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="create-project-title">
       <div class="modal-header">
         <div>
-          <div class="modal-title" id="create-project-title">Create New Project</div>
+          <div class="modal-title" id="create-project-title">Bootstrap Project</div>
           <div class="modal-subtitle">Create an empty project or bootstrap one from a repository folder.</div>
         </div>
         <button class="modal-close" type="button" aria-label="Close create project modal" onclick="closeCreateProjectModal()">&times;</button>
       </div>
       <div class="modal-body push-area">
-        <div class="info-box">
-          <strong>Create and bootstrap a new project.</strong>
-          Select a repository folder to begin extracting memory and dependencies.
-        </div>
+          <div class="info-box">
+            <strong>Create and bootstrap a new project.</strong>
+            Pick a repository folder or enter a repository path to begin extracting memory and dependencies.
+            <br><br>
+            <strong>Tip:</strong> To rescan the currently selected project with updated files, use the same repository path or folder. Bootstrap is idempotent and will update existing project records.
+          </div>
         <div class="form-group">
           <label>Project Name (optional)</label>
           <input id="create-name" type="text" placeholder="e.g. cortex-backend">
@@ -120,14 +104,22 @@
         <div class="form-group">
           <label>Select repository folder</label>
           <div class="input-row">
-            <label class="picker-btn" id="create-dir-picker-label">
+            <button class="picker-btn" id="create-dir-picker-button" type="button" onclick="pickCreateDirectory()">
               📂 Directory...
-              <input type="file" webkitdirectory class="picker-hidden" id="create-dir-picker">
-            </label>
+            </button>
           </div>
           <div class="picker-info" id="create-dir-path-display"></div>
-          <input id="create-path" type="text" placeholder="/absolute/path/to/repo" style="margin-top: 8px;">
+          <div
+            class="picker-info"
+            id="create-dir-preview"
+            style="white-space: pre-wrap; max-height: 240px; overflow-y: auto; padding-right: 8px;"
+          ></div>
         </div>
+          <div class="form-group">
+            <label>Repository path</label>
+            <div class="picker-info">Optional fallback. Use an absolute local path if you prefer server-side scanning.</div>
+            <input id="create-path" type="text" placeholder="/absolute/path/to/repo">
+          </div>
         <div class="form-group">
           <label>Max files to scan initially <span style="color:var(--text-dim);">(lower for quick test)</span></label>
           <input id="create-max-files" type="number" min="1" max="5000" value="10" style="max-width:140px;">
@@ -143,20 +135,66 @@
   {{ super() }}
   <script>
     const createProjectModal = document.getElementById('create-project-modal');
-    const createDirPicker = document.getElementById('create-dir-picker');
-    const createDirLabel = document.getElementById('create-dir-picker-label');
+    const createDirButton = document.getElementById('create-dir-picker-button');
     const createDirDisplay = document.getElementById('create-dir-path-display');
-    const createPathInput = document.getElementById('create-path');
-    const dirPicker = document.getElementById('dir-picker');
-    const dirLabel = document.getElementById('dir-picker-label');
-    const dirDisplay = document.getElementById('dir-path-display');
-    const bootstrapPathInput = document.getElementById('bootstrap-path');
+    const createDirPreview = document.getElementById('create-dir-preview');
     const pushFilePaths = [];
     const pushFilePicker = document.getElementById('push-file-picker');
     const pushFolderPicker = document.getElementById('push-folder-picker');
     const pushPickerInfo = document.getElementById('push-picker-info');
     const pushFileLabel = document.getElementById('push-file-picker-label');
     const pushFolderLabel = document.getElementById('push-folder-picker-label');
+    let createDirectoryHandle = null;
+    let createImportedFolder = null;
+    const IMPORT_EXCLUDED_DIRS = new Set([
+      '.git',
+      '.hg',
+      '.svn',
+      'node_modules',
+      '.venv',
+      'venv',
+      '__pycache__',
+      '.mypy_cache',
+      '.pytest_cache',
+      'dist',
+      'build',
+      'target',
+      '.next',
+      '.turbo',
+      '.idea',
+      '.vscode',
+      'coverage',
+      '.cache',
+      'test',
+      'tests',
+    ]);
+    const IMPORT_ALLOWED_EXTENSIONS = new Set([
+      '.py',
+      '.toml',
+      '.json',
+      '.yaml',
+      '.yml',
+      '.md',
+      '.txt',
+      '.ini',
+      '.cfg',
+      '.env',
+      '.go',
+      '.rs',
+      '.js',
+      '.jsx',
+      '.ts',
+      '.tsx',
+      '.java',
+      '.kt',
+      '.swift',
+      '.c',
+      '.cc',
+      '.cpp',
+      '.h',
+      '.hpp',
+      '.sh',
+    ]);
 
     function resetCreateProjectModal() {
       document.getElementById('create-name').value = '';
@@ -164,10 +202,13 @@
       document.getElementById('create-max-files').value = '10';
       document.getElementById('create-result').textContent = '';
       createDirDisplay.textContent = '';
-      createDirLabel.classList.remove('selected');
-      createDirLabel.childNodes[0].textContent = '📂 Directory...';
-      createDirPicker.value = '';
+      createDirPreview.textContent = '';
+      createDirButton.classList.remove('selected');
+      createDirButton.textContent = '📂 Directory...';
+      createDirectoryHandle = null;
+      createImportedFolder = null;
     }
+
 
     function openCreateProjectModal() {
       createProjectModal.classList.add('visible');
@@ -204,21 +245,6 @@
         : button.dataset.defaultLabel;
     }
 
-    createDirPicker.addEventListener('change', () => {
-      if (createDirPicker.files.length > 0) {
-        const firstPath = createDirPicker.files[0].webkitRelativePath;
-        const dirName = firstPath.split('/')[0];
-        createDirLabel.classList.add('selected');
-        createDirLabel.childNodes[0].textContent = '📂 ' + dirName;
-        createDirDisplay.textContent = 'Selected: ' + dirName + ' (' + createDirPicker.files.length + ' files)';
-        if (!createPathInput.value) {
-          createPathInput.value = dirName;
-          createPathInput.focus();
-          createPathInput.setSelectionRange(0, 0);
-        }
-      }
-    });
-
     createProjectModal.addEventListener('click', event => {
       if (event.target === createProjectModal) {
         closeCreateProjectModal();
@@ -228,21 +254,6 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && createProjectModal.classList.contains('visible')) {
         closeCreateProjectModal();
-      }
-    });
-
-    dirPicker.addEventListener('change', () => {
-      if (dirPicker.files.length > 0) {
-        const firstPath = dirPicker.files[0].webkitRelativePath;
-        const dirName = firstPath.split('/')[0];
-        dirLabel.classList.add('selected');
-        dirLabel.childNodes[0].textContent = '📂 ' + dirName;
-        dirDisplay.textContent = 'Selected: ' + dirName + ' (' + dirPicker.files.length + ' files)';
-        if (!bootstrapPathInput.value) {
-          bootstrapPathInput.value = dirName;
-          bootstrapPathInput.focus();
-          bootstrapPathInput.setSelectionRange(0, 0);
-        }
       }
     });
 
@@ -303,6 +314,201 @@
       updatePushPickerInfo();
     });
 
+    function importPathParts(relativePath) {
+      return relativePath.split('/').filter(Boolean);
+    }
+
+    function importIsCandidateFile(relativePath) {
+      const parts = importPathParts(relativePath);
+      if (parts.length === 0) return false;
+      const name = parts[parts.length - 1];
+      if (/^(test_|.*_test\.|.*\.test\.|.*\.spec\.)/i.test(name)) return false;
+      const dot = name.lastIndexOf('.');
+      const extension = dot >= 0 ? name.slice(dot).toLowerCase() : '';
+      if (parts.length === 1) {
+        if (name.startsWith('README')) return true;
+        if (name.startsWith('Dockerfile')) return true;
+        if (name.startsWith('docker-compose')) return true;
+        if (/^requirements.*\.txt$/i.test(name)) return true;
+        if (['pyproject.toml', 'package.json', 'compose.yaml', 'Makefile'].includes(name)) return true;
+      }
+      return IMPORT_ALLOWED_EXTENSIONS.has(extension);
+    }
+
+    function importGlobToRegex(glob) {
+      let regex = '^';
+      for (let index = 0; index < glob.length; index += 1) {
+        const char = glob[index];
+        const next = glob[index + 1];
+        if (char === '*') {
+          if (next === '*') {
+            regex += '.*';
+            index += 1;
+          } else {
+            regex += '[^/]*';
+          }
+          continue;
+        }
+        if (char === '?') {
+          regex += '[^/]';
+          continue;
+        }
+        if ('\\.[]{}()+-^$|'.includes(char)) {
+          regex += '\\' + char;
+          continue;
+        }
+        regex += char;
+      }
+      regex += '$';
+      return new RegExp(regex);
+    }
+
+    async function importReadGitignoreRules(text, baseDir) {
+      const rules = [];
+      for (const rawLine of text.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) {
+          continue;
+        }
+        const negated = line.startsWith('!');
+        let pattern = negated ? line.slice(1) : line;
+        const directoryOnly = pattern.endsWith('/');
+        pattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '');
+        if (!pattern) {
+          continue;
+        }
+        rules.push({
+          baseDir,
+          negated,
+          directoryOnly,
+          hasSlash: pattern.includes('/'),
+          regex: importGlobToRegex(pattern),
+        });
+      }
+      return rules;
+    }
+
+    function importMatchesGitignore(relativePath, rules, isDirectory = false) {
+      let ignored = false;
+      const normalized = relativePath.replace(/^\/+/, '');
+      for (const rule of rules) {
+        const scopedPath = rule.baseDir
+          ? normalized.startsWith(rule.baseDir + '/') ? normalized.slice(rule.baseDir.length + 1) : null
+          : normalized;
+        if (scopedPath === null || !scopedPath) {
+          continue;
+        }
+        const target = rule.hasSlash ? scopedPath : scopedPath.split('/').pop();
+        if (!target || !rule.regex.test(target)) {
+          continue;
+        }
+        if (rule.directoryOnly && !isDirectory && !scopedPath.startsWith(target + '/') && scopedPath !== target) {
+          continue;
+        }
+        ignored = !rule.negated;
+      }
+      return ignored;
+    }
+
+    async function importCollectDirectoryEntries(dirHandle, prefix = '', inheritedRules = []) {
+      const entries = [];
+      for await (const [name, handle] of dirHandle.entries()) {
+        entries.push([name, handle]);
+      }
+      entries.sort((left, right) => left[0].localeCompare(right[0]));
+
+      let activeRules = inheritedRules.slice();
+      const gitignoreEntry = entries.find(([name, handle]) => name === '.gitignore' && handle.kind === 'file');
+      if (gitignoreEntry) {
+        const gitignoreFile = await gitignoreEntry[1].getFile();
+        activeRules = activeRules.concat(await importReadGitignoreRules(await gitignoreFile.text(), prefix));
+      }
+
+      const acceptedFiles = [];
+      for (const [name, handle] of entries) {
+        if (name === '.gitignore') {
+          continue;
+        }
+        const relativePath = prefix ? `${prefix}/${name}` : name;
+        if (handle.kind === 'directory') {
+          if (name.startsWith('.') || IMPORT_EXCLUDED_DIRS.has(name)) {
+            continue;
+          }
+          if (importMatchesGitignore(relativePath, activeRules, true)) {
+            continue;
+          }
+          acceptedFiles.push(...await importCollectDirectoryEntries(handle, relativePath, activeRules));
+          continue;
+        }
+
+        if (name.startsWith('.') || importMatchesGitignore(relativePath, activeRules)) {
+          continue;
+        }
+        if (!importIsCandidateFile(relativePath)) {
+          continue;
+        }
+
+        const file = await handle.getFile();
+        if (file.size > 256 * 1024) {
+          continue;
+        }
+        acceptedFiles.push({ file, relativePath });
+      }
+      return acceptedFiles;
+    }
+
+    function renderImportedFolderSelection(button, display, previewEl, importedFolder) {
+      button.classList.add('selected');
+      button.textContent = '📂 ' + importedFolder.folderName;
+      display.textContent = 'Selected: ' + importedFolder.folderName;
+      if (importedFolder.files.length === 0) {
+        previewEl.textContent = 'No importable files remained after filtering.';
+        return;
+      }
+      const preview = importedFolder.files.map(entry => entry.relativePath).join('\n');
+      previewEl.textContent = `Included files (${importedFolder.files.length}):\n${preview}`;
+    }
+
+    async function pickDirectory({ display, previewEl, assignSelection, button }) {
+      if (!window.showDirectoryPicker) {
+        toast('This browser does not support folder picking.', 'error');
+        return;
+      }
+      try {
+        display.textContent = 'Scanning selected folder...';
+        previewEl.textContent = '';
+        const handle = await window.showDirectoryPicker();
+        const files = await importCollectDirectoryEntries(handle);
+        const importedFolder = {
+          folderName: handle.name,
+          files,
+        };
+        assignSelection(handle, importedFolder);
+        renderImportedFolderSelection(button, display, previewEl, importedFolder);
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          display.textContent = '';
+          return;
+        }
+        display.textContent = '';
+        previewEl.textContent = '';
+        toast('Folder selection failed', 'error');
+      }
+    }
+
+    async function pickCreateDirectory() {
+      return pickDirectory({
+        display: createDirDisplay,
+        previewEl: createDirPreview,
+        button: createDirButton,
+        assignSelection(handle, importedFolder) {
+          createDirectoryHandle = handle;
+          createImportedFolder = importedFolder;
+        },
+      });
+    }
+
+
     async function pushMemory() {
       const pid = selectedProject();
       if (!pid) return;
@@ -344,8 +550,9 @@
       const name = document.getElementById('create-name').value.trim();
       const resultEl = document.getElementById('create-result');
       const maxFiles = parseInt(document.getElementById('create-max-files').value, 10) || null;
+      const hasFolderSelection = Boolean(createImportedFolder);
 
-      if (!path) {
+      if (!path && !hasFolderSelection) {
         if (!name) {
           toast('Please enter a repo path or at least a project name.', 'error');
           return;
@@ -376,19 +583,43 @@
       resultEl.innerHTML = '<span class="spinner"></span> Creating & Bootstrapping...';
       resultEl.style.color = 'var(--text-dim)';
       try {
-        const body = { repo_path: path };
-        if (name) body.project_name = name;
-        if (maxFiles) body.max_scan_files = maxFiles;
-
-        const res = await fetch(API + '/projects/bootstrap', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+        let res;
+        if (hasFolderSelection) {
+          const importedFolder = createImportedFolder;
+          if (!importedFolder || importedFolder.files.length === 0) {
+            throw new Error('No importable files remained after filtering.');
+          }
+          const formData = new FormData();
+          formData.append('folder_name', importedFolder.folderName);
+          if (name) formData.append('project_name', name);
+          if (maxFiles) formData.append('max_scan_files', String(maxFiles));
+          importedFolder.files.forEach(entry => {
+            formData.append('relative_paths', entry.relativePath);
+            formData.append('files', entry.file, entry.relativePath);
+          });
+          res = await fetch(API + '/projects/import', {
+            method: 'POST',
+            body: formData,
+          });
+        } else {
+          const body = { repo_path: path };
+          if (name) body.project_name = name;
+          if (maxFiles) body.max_scan_files = maxFiles;
+          res = await fetch(API + '/projects/bootstrap', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        }
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
+        const importedLine = data.files_imported === null || data.files_imported === undefined
+          ? ''
+          : 'Imported files: ' + data.files_imported + '\n';
         resultEl.textContent = '✓ Project Created: ' + data.project_id.slice(0, 8) + '...\n'
-          + 'Stored memories: ' + data.stored_memory_count + '\n'
+          + importedLine
+          + 'Scanned files: ' + data.files_scanned + '\n'
+          + 'Memories created: ' + data.memories_created + '\n'
           + data.bootstrap_summary;
         resultEl.style.color = 'var(--green)';
         toast('Project Created Successfully');
@@ -401,35 +632,5 @@
       }
     }
 
-    async function bootstrapProject() {
-      const path = document.getElementById('bootstrap-path').value.trim();
-      if (!path) {
-        toast('Enter or select a repo path', 'error');
-        return;
-      }
-      const maxFiles = parseInt(document.getElementById('bootstrap-max-files').value, 10) || null;
-      const resultEl = document.getElementById('bootstrap-result');
-      resultEl.innerHTML = '<span class="spinner"></span> Bootstrapping...';
-
-      try {
-        const body = { repo_path: path };
-        if (maxFiles) body.max_scan_files = maxFiles;
-        const res = await fetch(API + '/projects/bootstrap', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        resultEl.textContent = '✓ Project: ' + data.project_id.slice(0, 8) + '...\n'
-          + 'Stored memories: ' + data.stored_memory_count + '\n'
-          + data.bootstrap_summary;
-        toast('Bootstrap complete');
-        await loadProjects(data.project_id);
-      } catch (error) {
-        resultEl.textContent = '✗ ' + error.message;
-        toast('Bootstrap failed', 'error');
-      }
-    }
   </script>
 {% endblock %}

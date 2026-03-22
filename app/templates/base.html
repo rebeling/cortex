@@ -749,6 +749,10 @@
       setText('stat-last', '—');
       setText('stat-status', '—');
       setClassName('stat-dot', 'stat-dot');
+      const deleteButton = document.getElementById('delete-project-button');
+      if (deleteButton) {
+        deleteButton.style.display = 'none';
+      }
       currentGraphDirty = false;
       currentGraphSyncAt = null;
       renderGraphStatusNote();
@@ -761,6 +765,7 @@
         const data = await res.json();
         const p = data.project;
         const bs = data.bootstrap_status || {};
+        const deleteButton = document.getElementById('delete-project-button');
         setText('stat-name', p.name || '—');
         setText('stat-id', p.id || '—');
         setText('stat-langs', Array.isArray(p.languages) && p.languages.length ? p.languages.join(', ') : '—');
@@ -784,8 +789,33 @@
             statusEl.textContent = 'Ready';
           }
         }
+        if (deleteButton) {
+          deleteButton.style.display = p.id ? 'inline-flex' : 'none';
+        }
         renderGraphStatusNote();
       } catch (error) {
+      }
+    }
+
+    async function deleteSelectedProject() {
+      const projectId = selectedProject();
+      if (!projectId) {
+        return;
+      }
+      const projectName = document.getElementById('stat-name')?.textContent?.trim() || projectId;
+      if (!window.confirm(`Delete project "${projectName}"?`)) {
+        return;
+      }
+      try {
+        const res = await fetch(API + '/projects/' + projectId, { method: 'DELETE' });
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        clearSavedProjectId();
+        await loadProjects();
+        toast('Project deleted');
+      } catch (error) {
+        toast('Delete failed: ' + error.message, 'error');
       }
     }
 

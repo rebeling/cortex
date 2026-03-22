@@ -50,6 +50,9 @@ class BootstrapResponse(BaseModel):
     created_files: list[str]
     bootstrap_summary: str
     stored_memory_count: int
+    memories_created: int
+    files_scanned: int
+    files_imported: int | None = None
 
 
 class ProjectResponse(BaseModel):

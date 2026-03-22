@@ -65,6 +65,17 @@ class MemoryService:
             raise ProjectNotFoundError("project not found")
         return project
 
+    def _filter_inactive_file_results(self, project_id: str, results: list[RetrievalResult], top_k: int) -> list[RetrievalResult]:
+        active_file_memory_ids = self._registry_service.get_active_file_memory_ids(project_id)
+        filtered: list[RetrievalResult] = []
+        for result in results:
+            if result.item.source_type == "repository_file" and result.item.id not in active_file_memory_ids:
+                continue
+            filtered.append(result)
+            if len(filtered) >= top_k:
+                break
+        return filtered
+
     async def ingest(
         self,
         *,
@@ -134,12 +145,13 @@ class MemoryService:
         if project.graph_dirty:
             await self._cognee_service.sync_graph(project_id)
             self._bootstrap_service.mark_graph_synced(project)
-        return await self._retrieval_service.search(
+        results = await self._retrieval_service.search(
             project_id=project_id,
             query=query,
-            top_k=top_k,
+            top_k=max(top_k * 4, top_k),
             file_paths=file_paths,
         )
+        return self._filter_inactive_file_results(project_id, results, top_k)
 
     async def context(
         self,

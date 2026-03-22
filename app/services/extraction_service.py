@@ -39,6 +39,9 @@ class ExtractionService:
     def _hash_text(value: str) -> str:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
+    def hash_text(self, value: str) -> str:
+        return self._hash_text(value)
+
     def _build_item(
         self,
         *,
@@ -224,6 +227,166 @@ class ExtractionService:
                     run_id=run_id,
                 )
             )
+        return items
+
+    @staticmethod
+    def _is_documentation_file(path: str) -> bool:
+        """Check if file is documentation (README, .md, .txt, etc.)."""
+        from pathlib import Path
+        file_path = Path(path)
+        name_lower = file_path.name.lower()
+
+        # Always include README files
+        if name_lower.startswith('readme'):
+            return True
+
+        # Include markdown and text documentation
+        if file_path.suffix.lower() in {'.md', '.txt', '.rst'}:
+            return True
+
+        # Include specific documentation/config files
+        if name_lower in {'changelog', 'contributing', 'license', 'authors', 'history'}:
+            return True
+
+        return False
+
+    @staticmethod
+    def _extract_comments_from_code(text: str, file_extension: str) -> str:
+        """Extract long comments and docstrings from code files."""
+        comments = []
+        lines = text.split('\n')
+
+        if file_extension in {'.py'}:
+            # Python: extract docstrings and multi-line comments
+            in_docstring = False
+            docstring_delim = None
+            current_block = []
+
+            for line in lines:
+                stripped = line.strip()
+
+                # Detect docstring start/end
+                if not in_docstring and (stripped.startswith('"""') or stripped.startswith("'''")):
+                    docstring_delim = stripped[:3]
+                    in_docstring = True
+                    current_block = [line]
+                    # Check if docstring ends on same line
+                    if stripped.endswith(docstring_delim) and len(stripped) > 6:
+                        in_docstring = False
+                        if len(' '.join(current_block).strip()) > 50:
+                            comments.append(' '.join(current_block))
+                        current_block = []
+                    continue
+
+                if in_docstring:
+                    current_block.append(line)
+                    if stripped.endswith(docstring_delim):
+                        in_docstring = False
+                        if len(' '.join(current_block).strip()) > 50:
+                            comments.append(' '.join(current_block))
+                        current_block = []
+                    continue
+
+                # Single-line comments (only if substantial)
+                if stripped.startswith('#') and len(stripped) > 30:
+                    comments.append(stripped)
+
+        elif file_extension in {'.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.go', '.rs', '.kt'}:
+            # C-style comments
+            in_block_comment = False
+            current_block = []
+
+            for line in lines:
+                stripped = line.strip()
+
+                # Multi-line comment start
+                if not in_block_comment and '/*' in stripped:
+                    in_block_comment = True
+                    current_block = [line]
+                    # Check if comment ends on same line
+                    if '*/' in stripped:
+                        in_block_comment = False
+                        if len(' '.join(current_block).strip()) > 50:
+                            comments.append(' '.join(current_block))
+                        current_block = []
+                    continue
+
+                if in_block_comment:
+                    current_block.append(line)
+                    if '*/' in stripped:
+                        in_block_comment = False
+                        if len(' '.join(current_block).strip()) > 50:
+                            comments.append(' '.join(current_block))
+                        current_block = []
+                    continue
+
+                # Single-line comments (only if substantial)
+                if stripped.startswith('//') and len(stripped) > 30:
+                    comments.append(stripped)
+
+        return '\n'.join(comments)
+
+    def extract_bootstrap_file_items(
+        self,
+        *,
+        project_id: str,
+        file_text: dict[str, str],
+        repo_commit: str | None,
+        run_id: str,
+    ) -> list[MemoryItem]:
+        items: list[MemoryItem] = []
+        for relative_path, text in sorted(file_text.items()):
+            from pathlib import Path
+            file_path = Path(relative_path)
+
+            # Check if this is a documentation file
+            is_doc = self._is_documentation_file(relative_path)
+
+            if is_doc:
+                # For documentation files, include full content (up to limit)
+                normalized = self._normalize_whitespace(text[:3000])
+                if not normalized or len(normalized) < 20:
+                    continue
+                items.append(
+                    self._build_item(
+                        project_id=project_id,
+                        session_id=None,
+                        item_type="description",
+                        title=relative_path,
+                        content=f"{relative_path}: {normalized}",
+                        provenance="bootstrap_file_scan",
+                        source_type="repository_documentation",
+                        file_paths=[relative_path],
+                        tags=["bootstrap", "documentation"],
+                        confidence=0.85,
+                        source_hash=self._hash_text(text),
+                        repo_commit=repo_commit,
+                        run_id=run_id,
+                    )
+                )
+            else:
+                # For code files, extract only comments and docstrings
+                comments = self._extract_comments_from_code(text, file_path.suffix.lower())
+                if comments and len(comments.strip()) > 50:
+                    normalized = self._normalize_whitespace(comments[:2000])
+                    items.append(
+                        self._build_item(
+                            project_id=project_id,
+                            session_id=None,
+                            item_type="description",
+                            title=f"{relative_path} (comments)",
+                            content=f"{relative_path} comments: {normalized}",
+                            provenance="bootstrap_file_scan",
+                            source_type="repository_comments",
+                            file_paths=[relative_path],
+                            tags=["bootstrap", "comments"],
+                            confidence=0.70,
+                            source_hash=self._hash_text(comments),
+                            repo_commit=repo_commit,
+                            run_id=run_id,
+                        )
+                    )
+                # If no substantial comments, skip the file entirely
         return items
 
     def _flatten_content(self, content: Any) -> str:

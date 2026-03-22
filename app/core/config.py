@@ -71,6 +71,8 @@ class Settings:
             ".vscode",
             "coverage",
             ".cache",
+            "test",
+            "tests",
         }
     )
     root_priority_patterns: tuple[str, ...] = (
@@ -87,7 +89,6 @@ class Settings:
     important_dir_names: tuple[str, ...] = (
         "app",
         "src",
-        "tests",
         "docs",
         "scripts",
         "config",
