@@ -86,6 +86,8 @@ class MemoryService:
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
         session_source: str | None = None,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> MemoryIngestResult:
         project = self._require_project(project_id)
         metadata = metadata or {}
@@ -98,6 +100,8 @@ class MemoryService:
                 project_id=project_id,
                 started_at=datetime.now(timezone.utc),
                 source=session_source or metadata.get("source", "implicit_ingest"),
+                agent_id=agent_id,
+                agent_role=agent_role,
             )
             self._registry_service.upsert_session(session)
 
@@ -112,6 +116,8 @@ class MemoryService:
             metadata=metadata,
             repo_commit=repo_commit,
             run_id=run_id,
+            agent_id=agent_id,
+            agent_role=agent_role,
         )
 
         deduped_items: list[MemoryItem] = []
@@ -140,6 +146,8 @@ class MemoryService:
         query: str,
         top_k: int,
         file_paths: list[str] | None = None,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> list[RetrievalResult]:
         project = self._require_project(project_id)
         if project.graph_dirty:
@@ -151,7 +159,15 @@ class MemoryService:
             top_k=max(top_k * 4, top_k),
             file_paths=file_paths,
         )
-        return self._filter_inactive_file_results(project_id, results, top_k)
+        filtered = self._filter_inactive_file_results(project_id, results, top_k * 2)
+        # Filter by agent if specified
+        if agent_id or agent_role:
+            filtered = [
+                r for r in filtered
+                if (not agent_id or r.item.agent_id == agent_id)
+                and (not agent_role or r.item.agent_role == agent_role)
+            ]
+        return filtered[:top_k]
 
     async def context(
         self,
@@ -160,8 +176,17 @@ class MemoryService:
         query: str,
         top_k: int,
         file_paths: list[str] | None = None,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> MemoryContextResult:
-        results = await self.search(project_id=project_id, query=query, top_k=top_k, file_paths=file_paths)
+        results = await self.search(
+            project_id=project_id,
+            query=query,
+            top_k=top_k,
+            file_paths=file_paths,
+            agent_id=agent_id,
+            agent_role=agent_role,
+        )
         memory_block = self._context_service.compose(results)
         return MemoryContextResult(memory_block=memory_block, supporting_items=results)
 
@@ -172,7 +197,16 @@ class MemoryService:
         query: str,
         top_k: int,
         file_paths: list[str] | None = None,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> MemoryChatResult:
-        results = await self.search(project_id=project_id, query=query, top_k=top_k, file_paths=file_paths)
+        results = await self.search(
+            project_id=project_id,
+            query=query,
+            top_k=top_k,
+            file_paths=file_paths,
+            agent_id=agent_id,
+            agent_role=agent_role,
+        )
         answer = await self._chat_service.answer(query=query, results=results)
         return MemoryChatResult(answer=answer.answer, answer_mode=answer.mode, supporting_items=results)

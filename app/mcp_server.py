@@ -58,7 +58,20 @@ def create_mcp_server(app_state: Any) -> FastMCP:
         content: str,
         file_paths: list[str] | None = None,
         source_type: str = "agent_summary",
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> dict[str, Any]:
+        """
+        Push memory observations to Cortex.
+
+        Args:
+            repo_path: Absolute path to repository
+            content: Memory content to store (observations, findings, etc.)
+            file_paths: Optional list of related file paths
+            source_type: Type of source (default: "agent_summary")
+            agent_id: Optional agent identifier (e.g., "agent-backend-001")
+            agent_role: Optional agent role (e.g., "backend", "frontend", "devops")
+        """
         try:
             project_id = await resolve_or_bootstrap_project(repo_path)
             result = await app_state.memory_service.ingest(
@@ -68,6 +81,8 @@ def create_mcp_server(app_state: Any) -> FastMCP:
                 file_paths=file_paths or [],
                 metadata={"source": "mcp"},
                 session_source="mcp",
+                agent_id=agent_id,
+                agent_role=agent_role,
             )
         except (ProjectNotFoundError, CogneeUnavailableError, CogneeStorageError, RuntimeError, ValueError) as exc:
             logger.exception("mcp cortex_push failed", extra={"repo_path": repo_path})
@@ -80,13 +95,31 @@ def create_mcp_server(app_state: Any) -> FastMCP:
         }
 
     @mcp.tool()
-    async def cortex_query(repo_path: str, question: str, top_k: int = 5) -> dict[str, Any]:
+    async def cortex_query(
+        repo_path: str,
+        question: str,
+        top_k: int = 5,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Query project memory and get prompt-ready context.
+
+        Args:
+            repo_path: Absolute path to repository
+            question: Question to answer from memory
+            top_k: Number of results to return (default: 5)
+            agent_id: Optional filter by agent_id
+            agent_role: Optional filter by agent_role (e.g., "backend", "frontend")
+        """
         try:
             project_id = await resolve_or_bootstrap_project(repo_path)
             result = await app_state.memory_service.context(
                 project_id=project_id,
                 query=question,
                 top_k=top_k,
+                agent_id=agent_id,
+                agent_role=agent_role,
             )
         except (ProjectNotFoundError, CogneeUnavailableError, CogneeStorageError, RuntimeError, ValueError) as exc:
             logger.exception("mcp cortex_query failed", extra={"repo_path": repo_path})
@@ -102,6 +135,8 @@ def create_mcp_server(app_state: Any) -> FastMCP:
                     "type": item.item.type,
                     "score": item.score,
                     "file_paths": item.item.file_paths,
+                    "agent_id": item.item.agent_id,
+                    "agent_role": item.item.agent_role,
                 }
                 for item in result.supporting_items
             ],

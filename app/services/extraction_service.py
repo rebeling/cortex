@@ -58,6 +58,8 @@ class ExtractionService:
         source_hash: str,
         repo_commit: str | None,
         run_id: str,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> MemoryItem:
         now = datetime.now(timezone.utc)
         return MemoryItem(
@@ -79,6 +81,8 @@ class ExtractionService:
             source_hash=source_hash,
             repo_commit=repo_commit,
             run_id=run_id,
+            agent_id=agent_id,
+            agent_role=agent_role,
         )
 
     @staticmethod
@@ -411,6 +415,8 @@ class ExtractionService:
         metadata: dict[str, Any],
         repo_commit: str | None,
         run_id: str,
+        agent_id: str | None = None,
+        agent_role: str | None = None,
     ) -> list[MemoryItem]:
         flattened = self._normalize_whitespace(self._flatten_content(content))
         if self._is_noise(flattened):
@@ -441,6 +447,8 @@ class ExtractionService:
                     source_hash=self._hash_text(flattened + line),
                     repo_commit=repo_commit,
                     run_id=run_id,
+                    agent_id=agent_id,
+                    agent_role=agent_role,
                 )
             )
         return items

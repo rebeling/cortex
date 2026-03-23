@@ -793,7 +793,44 @@
           deleteButton.style.display = p.id ? 'inline-flex' : 'none';
         }
         renderGraphStatusNote();
+        loadAgentContributions(pid);
       } catch (error) {
+      }
+    }
+
+    async function loadAgentContributions(pid) {
+      const card = document.getElementById('agent-contributions-card');
+      const list = document.getElementById('agent-contributions-list');
+      if (!card || !list) return;
+
+      try {
+        const res = await fetch(API + '/memory/agents/' + pid);
+        if (!res.ok) {
+          card.style.display = 'none';
+          return;
+        }
+        const data = await res.json();
+
+        if (!data.agents || data.agents.length === 0) {
+          card.style.display = 'none';
+          return;
+        }
+
+        // Show card and render agents
+        card.style.display = 'block';
+        list.innerHTML = data.agents.map(agent => `
+          <div style="padding: 12px 16px; border-bottom: 1px solid var(--border); last-child:border-bottom:none;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+              <span style="font-weight: 600; color: var(--accent);">${escHtml(agent.agent_id)}</span>
+              ${agent.agent_role ? `<span style="font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(124, 92, 252, 0.15); color: var(--text-dim);">${escHtml(agent.agent_role)}</span>` : ''}
+            </div>
+            <div style="font-size: 12px; color: var(--text-dim);">
+              ${agent.sessions.length} session(s)
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        card.style.display = 'none';
       }
     }
 

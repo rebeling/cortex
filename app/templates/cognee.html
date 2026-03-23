@@ -41,6 +41,18 @@
         </div>
       </div>
 
+      <div class="stats-card" id="agent-contributions-card" style="display:none; margin-top: 16px;">
+        <div class="stats-card-header">
+          <div class="stats-card-title-wrap">
+            <div class="stats-card-title">Agent Contributions</div>
+            <div class="stats-card-subtitle">agents working on this project</div>
+          </div>
+        </div>
+        <div id="agent-contributions-list" style="padding: 16px 0;">
+          <div style="color: var(--text-dim); font-size: 13px;">No agent contributions yet.</div>
+        </div>
+      </div>
+
       <details class="cortex-accordion" id="acc-push">
         <summary>Push Memory</summary>
         <div class="cortex-accordion-content push-area">
@@ -55,6 +67,22 @@
           <div class="form-group">
             <label>Source type</label>
             <input id="push-source" type="text" value="agent_summary">
+          </div>
+          <div class="form-group">
+            <label>Agent ID <span style="color:var(--text-dim);">(optional, for multi-agent teams)</span></label>
+            <input id="push-agent-id" type="text" placeholder="e.g., agent-backend-001">
+          </div>
+          <div class="form-group">
+            <label>Agent Role <span style="color:var(--text-dim);">(optional)</span></label>
+            <select id="push-agent-role">
+              <option value="">None</option>
+              <option value="backend">Backend</option>
+              <option value="frontend">Frontend</option>
+              <option value="devops">DevOps</option>
+              <option value="testing">Testing</option>
+              <option value="security">Security</option>
+              <option value="docs">Documentation</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Attach files</label>
@@ -519,25 +547,32 @@
       }
       const sourceType = document.getElementById('push-source').value.trim() || 'agent_summary';
       const filePaths = document.getElementById('push-files').value.split(',').map(s => s.trim()).filter(Boolean);
+      const agentId = document.getElementById('push-agent-id').value.trim() || null;
+      const agentRole = document.getElementById('push-agent-role').value || null;
 
       try {
         setPushButtonBusy(true);
+        const payload = {
+          project_id: pid,
+          source_type: sourceType,
+          content,
+          file_paths: filePaths,
+          metadata: { source: 'frontend' },
+        };
+        if (agentId) payload.agent_id = agentId;
+        if (agentRole) payload.agent_role = agentRole;
+
         const res = await fetch(API + '/memory/ingest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: pid,
-            source_type: sourceType,
-            content,
-            file_paths: filePaths,
-            metadata: { source: 'frontend' },
-          }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         toast('Pushed ' + data.stored_items.length + ' item(s)');
         document.getElementById('push-content').value = '';
         await loadProjectStats(pid);
+        await loadAgentContributions(pid);
       } catch (error) {
         toast('Push failed: ' + error.message, 'error');
       } finally {

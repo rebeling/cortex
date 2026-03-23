@@ -28,6 +28,8 @@ class MemoryItem(BaseModel):
     source_hash: str
     repo_commit: str | None = None
     run_id: str
+    agent_id: str | None = None
+    agent_role: str | None = None
 
 
 class RetrievalResult(BaseModel):
@@ -45,6 +47,8 @@ class IngestRequest(BaseModel):
     content: Any
     file_paths: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    agent_id: str | None = None
+    agent_role: str | None = None
 
     @field_validator("project_id", "source_type")
     @classmethod
@@ -63,6 +67,8 @@ class SearchRequest(BaseModel):
     project_id: str
     query: str
     top_k: int = 8
+    agent_id: str | None = None
+    agent_role: str | None = None
 
     @field_validator("project_id", "query")
     @classmethod
@@ -81,6 +87,8 @@ class ContextRequest(BaseModel):
     query: str
     file_paths: list[str] = Field(default_factory=list)
     top_k: int = 6
+    agent_id: str | None = None
+    agent_role: str | None = None
 
     @field_validator("project_id", "query")
     @classmethod
@@ -100,6 +108,8 @@ class ChatRequest(BaseModel):
     query: str
     file_paths: list[str] = Field(default_factory=list)
     top_k: int = 6
+    agent_id: str | None = None
+    agent_role: str | None = None
 
     @field_validator("project_id", "query")
     @classmethod

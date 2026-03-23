@@ -26,6 +26,8 @@ class SessionModel(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     source: str
+    agent_id: str | None = None
+    agent_role: str | None = None
 
 
 class CreateProjectRequest(BaseModel):

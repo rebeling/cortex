@@ -67,6 +67,16 @@ class ProjectRegistryService:
         session = payload["sessions"].get(session_id)
         return SessionModel.model_validate(session) if session else None
 
+    def list_sessions(self, project_id: str) -> list[SessionModel]:
+        """List all sessions for a given project."""
+        with self._lock:
+            payload = self._read()
+        sessions = []
+        for session_payload in payload["sessions"].values():
+            if session_payload.get("project_id") == project_id:
+                sessions.append(SessionModel.model_validate(session_payload))
+        return sessions
+
     def remember_fingerprint(self, project_id: str, fingerprint: str) -> None:
         with self._lock:
             payload = self._read()
