@@ -26,7 +26,7 @@ class CogneeService:
         self._cognee = None
         self._search_type_chunks = None
 
-    def _prepare_environment(self) -> None:
+    def _prepare_environment(self, project_id: str) -> None:
         if self._settings is None:
             return
         if not self._settings.has_llm_api_key():
@@ -38,23 +38,29 @@ class CogneeService:
                 f"Cognee path variables must be absolute or omitted in .env: {joined}. "
                 "Remove them to use Cortex defaults, or replace them with absolute paths."
             )
-        for path in (
-            self._settings.cognee_data_root_directory,
-            self._settings.cognee_system_root_directory,
-            self._settings.cognee_cache_root_directory,
-        ):
-            Path(path).mkdir(parents=True, exist_ok=True)
+
+        # Project-specific Cognee directories for true multi-project isolation
+        cognee_base = self._settings.service_data_dir / "cognee" / project_id
+        data_dir = cognee_base / "data"
+        system_dir = cognee_base / "system"
+        cache_dir = cognee_base / "cache"
+
+        for path in (data_dir, system_dir, cache_dir):
+            path.mkdir(parents=True, exist_ok=True)
+
         os.environ["LLM_API_KEY"] = self._settings.llm_api_key
         os.environ["LLM_PROVIDER"] = self._settings.llm_provider
         os.environ["LLM_MODEL"] = self._settings.llm_model
-        os.environ["DATA_ROOT_DIRECTORY"] = str(self._settings.cognee_data_root_directory)
-        os.environ["SYSTEM_ROOT_DIRECTORY"] = str(self._settings.cognee_system_root_directory)
-        os.environ["CACHE_ROOT_DIRECTORY"] = str(self._settings.cognee_cache_root_directory)
+        os.environ["DATA_ROOT_DIRECTORY"] = str(data_dir)
+        os.environ["SYSTEM_ROOT_DIRECTORY"] = str(system_dir)
+        os.environ["CACHE_ROOT_DIRECTORY"] = str(cache_dir)
 
-    def _ensure_client(self) -> Any:
+    def _ensure_client(self, project_id: str) -> Any:
+        # Always re-prepare environment to ensure correct project-specific directories
+        self._prepare_environment(project_id)
+
         if self._cognee is not None:
             return self._cognee
-        self._prepare_environment()
         try:
             import cognee
             from cognee import SearchType
@@ -116,7 +122,7 @@ class CogneeService:
     async def store_memory_items(self, project_id: str, items: list[MemoryItem], *, rebuild_graph: bool = True) -> None:
         if not items:
             return
-        cognee = self._ensure_client()
+        cognee = self._ensure_client(project_id)
         dataset = self.dataset_name(project_id)
         documents = [self.serialize_memory_item(item) for item in items]
         logger.info(
@@ -131,7 +137,7 @@ class CogneeService:
             await self.sync_graph(project_id)
 
     async def sync_graph(self, project_id: str) -> None:
-        cognee = self._ensure_client()
+        cognee = self._ensure_client(project_id)
         dataset = self.dataset_name(project_id)
         logger.info("syncing graph", extra={"project_id": project_id, "dataset": dataset})
         try:
@@ -140,7 +146,7 @@ class CogneeService:
             raise CogneeStorageError(f"Cognee graph sync failed: {exc}") from exc
 
     async def generate_graph_visualization(self, project_id: str, output_path: Path | str) -> Path:
-        self._ensure_client()
+        self._ensure_client(project_id)
         dataset = self.dataset_name(project_id)
         path = Path(output_path).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,7 +163,7 @@ class CogneeService:
         return path
 
     async def search_memory(self, project_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
-        cognee = self._ensure_client()
+        cognee = self._ensure_client(project_id)
         dataset = self.dataset_name(project_id)
         logger.info(
             "searching cognee memory",
@@ -182,7 +188,7 @@ class CogneeService:
 
     async def get_graph(self, project_id: str) -> list[dict[str, str]]:
         """Return knowledge-graph triples for a project."""
-        self._ensure_client()
+        self._ensure_client(project_id)
         dataset = self.dataset_name(project_id)
         logger.info("fetching graph triples", extra={"project_id": project_id, "dataset": dataset})
 

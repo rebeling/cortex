@@ -722,6 +722,15 @@ class BootstrapService:
         if project is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
 
+        # Delete project-specific Cognee data (vector DB + graph DB)
+        cognee_project_dir = self._settings.service_data_dir / "cognee" / project_id
+        if cognee_project_dir.exists():
+            logger.info(
+                "Deleting project-specific Cognee data",
+                extra={"project_id": project_id, "path": str(cognee_project_dir)}
+            )
+            shutil.rmtree(cognee_project_dir, ignore_errors=True)
+
         if not project.repo_path:
             return
 
