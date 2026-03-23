@@ -26,7 +26,7 @@ class CogneeService:
         self._cognee = None
         self._search_type_chunks = None
 
-    def _prepare_environment(self, project_id: str) -> None:
+    def _prepare_environment(self, project_id: str | None = None) -> None:
         if self._settings is None:
             return
         if not self._settings.has_llm_api_key():
@@ -39,11 +39,15 @@ class CogneeService:
                 "Remove them to use Cortex defaults, or replace them with absolute paths."
             )
 
-        # Project-specific Cognee directories for true multi-project isolation
-        cognee_base = self._settings.service_data_dir / "cognee" / project_id
-        data_dir = cognee_base / "data"
-        system_dir = cognee_base / "system"
-        cache_dir = cognee_base / "cache"
+        if project_id:
+            cognee_base = self._settings.service_data_dir / "cognee" / project_id
+            data_dir = cognee_base / "data"
+            system_dir = cognee_base / "system"
+            cache_dir = cognee_base / "cache"
+        else:
+            data_dir = self._settings.cognee_data_root_directory
+            system_dir = self._settings.cognee_system_root_directory
+            cache_dir = self._settings.cognee_cache_root_directory
 
         for path in (data_dir, system_dir, cache_dir):
             path.mkdir(parents=True, exist_ok=True)

@@ -342,55 +342,38 @@ class ExtractionService:
         for relative_path, text in sorted(file_text.items()):
             from pathlib import Path
             file_path = Path(relative_path)
-
-            # Check if this is a documentation file
             is_doc = self._is_documentation_file(relative_path)
-
             if is_doc:
-                # For documentation files, include full content (up to limit)
-                normalized = self._normalize_whitespace(text[:3000])
-                if not normalized or len(normalized) < 20:
-                    continue
-                items.append(
-                    self._build_item(
-                        project_id=project_id,
-                        session_id=None,
-                        item_type="description",
-                        title=relative_path,
-                        content=f"{relative_path}: {normalized}",
-                        provenance="bootstrap_file_scan",
-                        source_type="repository_documentation",
-                        file_paths=[relative_path],
-                        tags=["bootstrap", "documentation"],
-                        confidence=0.85,
-                        source_hash=self._hash_text(text),
-                        repo_commit=repo_commit,
-                        run_id=run_id,
-                    )
-                )
+                extracted_content = self._normalize_whitespace(text[:3000])
+                tags = ["bootstrap", "documentation"]
+                confidence = 0.85
             else:
-                # For code files, extract only comments and docstrings
                 comments = self._extract_comments_from_code(text, file_path.suffix.lower())
-                if comments and len(comments.strip()) > 50:
-                    normalized = self._normalize_whitespace(comments[:2000])
-                    items.append(
-                        self._build_item(
-                            project_id=project_id,
-                            session_id=None,
-                            item_type="description",
-                            title=f"{relative_path} (comments)",
-                            content=f"{relative_path} comments: {normalized}",
-                            provenance="bootstrap_file_scan",
-                            source_type="repository_comments",
-                            file_paths=[relative_path],
-                            tags=["bootstrap", "comments"],
-                            confidence=0.70,
-                            source_hash=self._hash_text(comments),
-                            repo_commit=repo_commit,
-                            run_id=run_id,
-                        )
-                    )
-                # If no substantial comments, skip the file entirely
+                primary_text = comments if comments and len(comments.strip()) > 50 else text
+                extracted_content = self._normalize_whitespace(primary_text[:2000])
+                tags = ["bootstrap", "comments"] if primary_text is comments else ["bootstrap", "code"]
+                confidence = 0.70 if primary_text is comments else 0.65
+
+            if not extracted_content or len(extracted_content) < 20:
+                continue
+
+            items.append(
+                self._build_item(
+                    project_id=project_id,
+                    session_id=None,
+                    item_type="description",
+                    title=relative_path,
+                    content=f"{relative_path}: {extracted_content}",
+                    provenance="bootstrap_file_scan",
+                    source_type="repository_file",
+                    file_paths=[relative_path],
+                    tags=tags,
+                    confidence=confidence,
+                    source_hash=self._hash_text(text),
+                    repo_commit=repo_commit,
+                    run_id=run_id,
+                )
+            )
         return items
 
     def _flatten_content(self, content: Any) -> str:

@@ -16,6 +16,7 @@ import yaml
 from fastapi import HTTPException, status
 
 from app.core.config import Settings
+from app.models.memory import MemoryItem
 from app.models.project import ProjectModel
 from app.services.cognee_service import CogneeStorageError, CogneeUnavailableError, CogneeService
 from app.services.extraction_service import ExtractionService
